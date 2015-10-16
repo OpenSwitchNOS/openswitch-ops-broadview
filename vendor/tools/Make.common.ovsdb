@@ -1,0 +1,62 @@
+# -*- mode: makefile; -*-
+#/*****************************************************************************
+#*
+#* (C) Copyright Broadcom Corporation 2015
+#*
+#* Licensed under the Apache License, Version 2.0 (the "License");
+#* you may not use this file except in compliance with the License.
+#*
+#* You may obtain a copy of the License at
+#* http://www.apache.org/licenses/LICENSE-2.0
+#*
+#* Unless required by applicable law or agreed to in writing, software
+#* distributed under the License is distributed on an "AS IS" BASIS,
+#* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#* See the License for the specific language governing permissions and
+#* limitations under the License.
+#*
+#***************************************************************************/
+
+
+ifeq ($(SBPLUGIN), ovsdb)
+
+    OPENAPPS_RELEASE = broadview-openprime-$(BCM_REL_NUM).$(BCM_VER_NUM).$(BCM_MAINT_NUM).$(BCM_BUILD_NUM)
+
+    sbdriver = sbovsdb
+    sb_ovsdb_arc = \
+        $(OPENAPPS_OUTPATH)/sbovsdb/sbovsdb.a
+endif
+
+ifeq ($(PLATFORM), UB-OVSDB)
+  vend_target += ovsdb
+  export CFLAGS += -DBVIEW_CHIP_OVSDB
+  static_lib += \
+        $(sb_ovsdb_arc) \
+        $(OVSDB)/lib/.libs/libopenvswitch.a \
+        $(OVSDB)/ovsdb/.libs/libovsdb.a
+
+endif
+
+ifeq ($(PLATFORM), OP-OVSDB)
+  export CFLAGS += -DBVIEW_CHIP_OVSDB --sysroot=$(BV_TARGET_SYSROOT)
+  static_lib += \
+        $(sb_ovsdb_arc) 
+
+  dynamic_sb_lib += -lovscommon
+
+#                    -lopenvswitch \
+#                    -lovscommon
+
+endif
+
+sbovsdb clean-sbovsdb debug-sbovsdb::
+	@echo Making SDK SB-OVSDB
+	@export
+	$(MAKE) $(DEBUG_PARMS) -C $(OPENAPPS_BASE)/src/sb_plugin/sb_ovsdb/ $@
+
+ifeq ($(PLATFORM), UB-OVSDB)
+ovsdb:
+	@echo Making openvswitch
+	cd $(OVSDB);sh $(OPENAPPS_BASE)/tools/openvswtich_build.sh
+endif
+
