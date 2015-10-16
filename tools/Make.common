@@ -1,0 +1,552 @@
+#
+#/*****************************************************************************
+#*
+#* (C) Copyright Broadcom Corporation 2015
+#*
+#* Licensed under the Apache License, Version 2.0 (the "License");
+#* you may not use this file except in compliance with the License.
+#*
+#* You may obtain a copy of the License at
+#* http://www.apache.org/licenses/LICENSE-2.0
+#*
+#* Unless required by applicable law or agreed to in writing, software
+#* distributed under the License is distributed on an "AS IS" BASIS,
+#* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#* See the License for the specific language governing permissions and
+#* limitations under the License.
+#*
+#***************************************************************************/
+
+#
+# The valid command line targets begin in the section "Command Line Targets".
+#
+
+# This make file is common for all builds.  It is expected that
+# several global variables have already been defined:
+# 	CROSS_COMPILE - base name of the cross compiler tools
+# 	OPENAPPS_BASE - top level directory of the OPENAPPS code
+# 	OPENAPPS_OUTPATH       - directory where the generated output is placed
+# 	platform      - Linux platform -- used primarily by the SDK
+#
+
+#
+# SDK make variables:
+# 	MAKE_LOCAL 	 - the name of a local makefile to be included by Make.config
+# 	NO_LOCAL_TARGETS - if set, do not copy targets to the SDK directory (leave in output)
+# 	QUIET      	 - reduces the output of the SDK make process (defined based on dmode)
+# 	SDK      	 - top level directory of the SDK code
+# 	SDKBUILD 	 - directory for SDK generated output relative to $(SDK)
+#
+
+#
+# Get the version info for this build from package.cfg
+#
+
+ifeq ($(BCM_REL_NUM),)
+   BCM_REL_NUM=0
+endif
+
+ifeq ($(BCM_VER_NUM),)
+   BCM_VER_NUM=0
+endif
+
+ifeq ($(BCM_MAINT_NUM),)
+   BCM_MAINT_NUM=0
+endif
+
+ifeq ($(BCM_BUILD_NUM),)
+   BCM_BUILD_NUM=1
+endif
+
+export BCM_REL_NUM
+export BCM_VER_NUM
+export BCM_MAINT_NUM
+export BCM_BUILD_NUM
+
+ifneq ($(OUTPATH),)
+   OPENAPPS_OUTPATH:=$(OUTPATH)
+   export OPENAPPS_OUTPATH
+endif
+export OUTPATH :=
+
+RELEASE_FILE = $(abspath $(OPENAPPS_BASE)/RELEASE)
+OPENAPPS_RELEASE = broadview-$(BCM_REL_NUM).$(BCM_VER_NUM).$(BCM_MAINT_NUM).$(BCM_BUILD_NUM)
+OPENAPPS_RELEASE_NUMBER = $(BCM_REL_NUM)$(BCM_VER_NUM)$(BCM_MAINT_NUM)$(BCM_BUILD_NUM)
+
+ifeq ($(CPU_BASE_DIR),)
+   CPU_BASE_DIR = $(abspath $(OPENAPPS_BASE)/platform/cpu/)
+endif
+export CPU_BASE_DIR
+
+#
+# Make variables
+#
+export AR      = $(CROSS_COMPILE)ar
+export AS      = $(CROSS_COMPILE)as
+export CC      = $(CROSS_COMPILE)gcc
+export LD      = $(CROSS_COMPILE)ld
+export NM      = $(CROSS_COMPILE)nm
+export OBJCOPY = $(CROSS_COMPILE)objcopy
+export OBJDUMP = $(CROSS_COMPILE)objdump
+export PERL    = perl
+export RANLIB  = $(CROSS_COMPILE)ranlib
+export RM      = rm
+export SED     = sed
+export SPLINT  = splint
+export STRIP   = $(CROSS_COMPILE)strip
+
+#
+# Other variables:
+# 	OPENAPPS_BUILD_DELIVERABLES_DIR - the directory containing the results of building
+# 			   E.g., the /tftpboot/ directory
+#   OPENAPPS_LIBRARIES_DIR    - the directory in which the linkable objects will be placed
+# 	OPENAPPS_CFLAGS   - CFLAGS that only apply to OPENAPPS (i.e., not the SDK)
+# 	PACKAGES_DIR	   - the directory into which the openapps packages are generated
+# 	dmode            - for debugging.  The following are valid values:
+#                               d  -- turn off optimization and enable debug symbols to be generated.
+#                                     This includes setting the SDK variables DEBUG_SYMBOLS
+#                                     and DEBUG_OPTIMIZE such that our settings in CFLAGS
+#                                     are used and not overridden by SDK settings.
+# 				i  -- turn on only POSIX IEEE Std 1003.2 APIs
+# 				m  -- turn on some make debugging
+# 				p  -- turn on profiling code generation for gprof tool
+# 				r  -- turn on debugging for the rpcgen script
+# 				vv -- echoes the SDK compiler invocation commands
+#				   -- any value will cause some make variables to be displayed
+#
+
+ifeq ($(OPENAPPS_BUILD_DELIVERABLES_DIR),)
+   OPENAPPS_BUILD_DELIVERABLES_DIR=$(abspath $(OPENAPPS_OUTPATH)/build/)
+endif
+export OPENAPPS_BUILD_DELIVERABLES_DIR
+
+OPENAPP_DELIVERABLES_DIR ?= $(abspath $(OPENAPPS_OUTPATH)/deliverables/)
+export OPENAPP_DELIVERABLES_DIR
+
+ifeq ($(OPENAPPS_LIBRARIES_DIR),)
+   OPENAPPS_LIBRARIES_DIR=$(abspath $(OPENAPPS_OUTPATH)/libraries)
+endif
+export OPENAPPS_LIBRARIES_DIR
+
+export add_target
+export del_target
+export del_target_object
+export agent_app_target
+export ref_app_target
+export sb_plugin_target
+export SDK_LOCAL
+export bst_ref_app_name=BroadViewBstApp
+export pt_ref_app_name=BroadViewPacketTraceApp
+export vend_cjson_name=vend_cjson.a
+export example_cfg_app_name=ExampleCfgApp
+
+
+PACKAGES_DIR ?= $(abspath $(OPENAPPS_OUTPATH)/packages)
+
+ifneq ($(dmode),)
+   ifeq ($(findstring d,$(dmode)),d)
+      OPENAPPS_CFLAGS += -ggdb2 -O0
+      export DEBUG_OPTIMIZE = -ggdb2 -O0
+   else
+      OPENAPPS_CFLAGS += -O2
+   endif
+   ifeq ($(findstring i,$(dmode)),i)
+      # for now, not turning on ansi -- too many warnings
+      #OPENAPPS_CFLAGS += -ansi -pedantic -D_POSIX_SOURCE -D_POSIX_C_SOURCE=2
+      # _XOPEN_SOURCE implies POSIX support (see features.h)
+      OPENAPPS_CFLAGS += -D_XOPEN_SOURCE=700
+   endif
+   ifeq ($(findstring m,$(dmode)),m)
+      export DEBUG_PARMS += --debug=v,j,m
+   endif
+   ifeq ($(findstring p,$(dmode)),p)
+      export CFLAGS += -pg
+      export LDFLAGS += -pg
+   endif
+   ifeq ($(findstring vv,$(dmode)),)
+      export QUIET = 1
+   endif
+else
+   OPENAPPS_CFLAGS += -O2
+   ifeq ($(QUIET),)
+      export QUIET = 1
+   endif
+endif
+
+export dmode
+
+#FEATURE_LIST and DISPATCH_LIST depends on the modules present in this package
+ifeq ($(FEATURE_LIST),)
+   FEATURE_LIST = L3
+endif
+ifeq ($(DISPATCH_LIST),)
+   DISPATCH_LIST = RPC
+endif
+
+DYNLIB_FLAGS = -fPIC
+
+export CFLAGS += -Wall -Wimplicit-function-declaration -DOPENAPPS_BUILDING_LIB $(DYNLIB_FLAGS) -Werror
+
+export OPENAPPS_CFLAGS
+
+
+#To create list of files recursively
+rwildcard=$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
+
+#
+# Variables for Source Archiving
+#
+# The relative path of OPENAPPS_OUTPATH directory w.r.t the OPENAPPS_BASE
+# would be helpful
+#
+outpath_relative = $(shell $(OPENAPPS_BASE)/tools/relativepath $(OPENAPPS_BASE) $(OPENAPPS_OUTPATH))
+
+#Include files if present
+include $(OPENAPPS_BASE)/tools/Make.common.platform
+-include $(OPENAPPS_BASE)/tools/Make.common.local
+-include $(OPENAPPS_BASE)/tools/Make.common.sdk
+-include $(OPENAPPS_BASE)/tools/Make.common.opennsl
+-include $(OPENAPPS_BASE)/tools/Make.common.ovsdb
+
+export infra_target
+infra_target += \
+	log \
+	rest \
+	modulemgr \
+	openappsdoc 
+
+
+#
+# First declare most of the targets in this make file to be phony (not real files)
+#
+.PHONY: clean clean-all dump-variables openapps all release $(infra_target) $(agent_app_target) $(ref_app_target) sbredirector $(sb_plugin_target)
+
+.DEFAULT_GOAL := all
+
+#
+# Command Line Targets
+#
+# The following group of targets may be specified on the command line.
+#
+
+#
+# These targets are the usual targets for complete builds:
+#
+# all		  : builds everything and is the default target
+# examples        : builds the example applications.
+# openapps        : builds the openapps shared object library.
+
+#CHIP specific macros
+ifeq ($(PLATFORM), td2_svk)
+    export CFLAGS += -DBVIEW_CHIP_TD2
+endif 
+
+ifeq ($(PLATFORM), th_svk)
+    export CFLAGS += -DBVIEW_CHIP_TOMAHAWK
+endif
+ 
+ifeq ($(PLATFORM), im_n2948_6xlm)
+   export CFLAGS += -DBVIEW_CHIP_TD2
+endif
+
+ifeq ($(PLATFORM), s6000)
+   export CFLAGS += -DBVIEW_CHIP_TD2
+endif
+
+ifneq (,$(filter vendor_init,$(COMPONENTS)))
+   vend_target += vendorinit
+    ref_app_target += examplecfgapp
+endif
+
+ifneq (,$(filter bst,$(COMPONENTS)))
+    app_target += bst
+    agent_app_target += bst
+    ref_app_target += bviewbstapp
+    app_arc += $(OPENAPPS_OUTPATH)/bst/bst.a
+endif
+
+ifneq (,$(filter pt,$(COMPONENTS)))
+    app_target += packet_trace
+    agent_app_target += packet_trace
+    ref_app_target += bviewpackettraceapp
+    app_arc += $(OPENAPPS_OUTPATH)/packet_trace/packet_trace.a
+endif
+
+ifneq ($(TARGETOS_VARIANT),wrl_2.0)
+MYCFLAGS := $(CFLAGS)
+else
+MYCFLAGS := 
+endif 
+
+export static_lib
+static_lib += \
+	$(OPENAPPS_OUTPATH)/log/log.a \
+	$(OPENAPPS_OUTPATH)/system/system.a \
+	$(OPENAPPS_OUTPATH)/modulemgr/modulemgr.a \
+	$(OPENAPPS_OUTPATH)/sbredirector/sbredirector.a \
+	$(OPENAPPS_OUTPATH)/vend_cjson/$(vend_cjson_name) \
+	$(OPENAPPS_OUTPATH)/rest/rest.a \
+	$(app_arc)
+
+dynamic_lib += \
+		-lpthread -lrt -lm \
+		$(dynamic_sb_lib)
+
+release:
+	@touch $(OPENAPPS_OUTPATH)/version.h
+	@echo "#define RELEASE_STRING ""\"$(BCM_REL_NUM).$(BCM_VER_NUM).$(BCM_MAINT_NUM).$(BCM_BUILD_NUM)\"" > $(OPENAPPS_OUTPATH)/version.h
+
+export infra_target_all
+infra_target_all += \
+	log \
+	system \
+	vend_cjson \
+	rest \
+	modulemgr \
+	sbredirector
+
+export common_include_list
+common_include_list += \
+	-I$(OPENAPPS_BASE)/src/public \
+	-I$(OPENAPPS_OUTPATH) \
+	-c \
+	$(OPENAPPS_BASE)/src/apps/agent/agent.c \
+	-o \
+	 $(OPENAPPS_OUTPATH)/agent.o
+
+all: release openapps_out_dir $(add_target) openapps $(vend_target) $(infra_target_all) $(app_target) $(ref_app_target)
+
+	$(CC) $(CFLAGS) $(common_include_list)
+	$(CC) $(MYCFLAGS) -o $(OPENAPP_DELIVERABLES_DIR)/BroadViewAgent $(OPENAPPS_OUTPATH)/agent.o \
+		-Wl,--start-group \
+			$(static_lib) \
+		-Wl,--end-group \
+		-L$(OPENAPP_DELIVERABLES_DIR) \
+		-Wl,-Bdynamic $(dynamic_lib)
+	cp -rf $(OPENAPPS_BUILD_DELIVERABLES_DIR)/* $(OPENAPP_DELIVERABLES_DIR) 2>/dev/null || :
+ifeq ($(PLATFORM), OP-OVSDB)
+	cp -f $(OPENAPPS_BASE)/src/nb_plugin/rest/agent_config.cfg $(OPENAPP_DELIVERABLES_DIR)/broadview_config.cfg
+	cp -f $(OPENAPPS_BASE)/src/sb_plugin/sb_ovsdb/ovsdb_config.cfg $(OPENAPP_DELIVERABLES_DIR)/broadview_ovsdb_config.cfg
+endif
+
+
+
+#Creates BroadViewBstApp for BST features
+bviewbstapp : release $(OPENAPP_DELIVERABLES_DIR) 
+	@echo Making bviewbstapp 
+	$(MAKE) $(DEBUG_PARMS) -C $(OPENAPPS_BASE)/example/bst_app/ $@
+	$(CC) $(MYCFLAGS) -o $(OPENAPP_DELIVERABLES_DIR)/$(bst_ref_app_name) $(OPENAPPS_OUTPATH)/bviewbstapp/bstapp_main.o \
+	-Wl,--start-group \
+	$(OPENAPPS_OUTPATH)/vend_cjson/$(vend_cjson_name) \
+	$(OPENAPPS_OUTPATH)/bviewbstapp/bviewbstapp.a \
+	-Wl,--end-group \
+	-Wl,-Bdynamic \
+	-lpthread -lm
+
+#Cleans BroadViewBstApp
+clean-bviewbstapp debug-bviewbstapp:
+	$(MAKE) $(DEBUG_PARMS) -C $(OPENAPPS_BASE)/example/bst_app/ $@
+
+
+#Creates BroadViewPtApp for Packet trace features
+bviewpackettraceapp : release $(OPENAPP_DELIVERABLES_DIR) 
+	@echo Making bviewpackettraceapp 
+	$(MAKE) $(DEBUG_PARMS) -C $(OPENAPPS_BASE)/example/packet_trace_app/ $@
+	$(CC) $(MYCFLAGS) -o $(OPENAPP_DELIVERABLES_DIR)/$(pt_ref_app_name) $(OPENAPPS_OUTPATH)/bviewpackettraceapp/ptapp_main.o \
+	-Wl,--start-group \
+	$(OPENAPPS_OUTPATH)/vend_cjson/$(vend_cjson_name) \
+	$(OPENAPPS_OUTPATH)/bviewpackettraceapp/bviewpackettraceapp.a \
+	-Wl,--end-group \
+	-Wl,-Bdynamic \
+	-lpthread -lm -lrt
+
+#Cleans BroadViewPtApp
+clean-bviewpackettraceapp debug-bviewpackettraceapp:
+	$(MAKE) $(DEBUG_PARMS) -C $(OPENAPPS_BASE)/example/packet_trace_app/ $@
+
+#Creates ExampleCfgApp for Packet trace features
+examplecfgapp :
+	@echo Making ExampleCfgApp 
+	$(MAKE) $(DEBUG_PARMS) -C $(OPENAPPS_BASE)/example/example_cfg_app/ $@
+	$(CC) $(MYCFLAGS) -o $(OPENAPP_DELIVERABLES_DIR)/$(example_cfg_app_name) $(OPENAPPS_OUTPATH)/examplecfgapp/example_client.o \
+	-Wl,--start-group \
+	$(OPENAPPS_OUTPATH)/examplecfgapp/examplecfgapp.a \
+	-Wl,--end-group \
+	-Wl,-Bdynamic \
+	-lpthread -lm -lrt
+
+#Cleans BroadViewPtApp
+clean-examplecfgapp debug-examplecfgapp:
+	$(MAKE) $(DEBUG_PARMS) -C $(OPENAPPS_BASE)/example/example_cfg_app/ $@
+
+
+#Compiles Module Manager
+modulemgr clean-modulemgr debug-modulemgr:
+	@echo Making Module Manager
+	$(MAKE) $(DEBUG_PARMS) -C $(OPENAPPS_BASE)/src/infrastructure/module_mgr/ $@
+
+#Compiles REST
+rest clean-rest debug-rest:
+	@echo Making REST 
+	$(MAKE) $(DEBUG_PARMS) -C $(OPENAPPS_BASE)/src/nb_plugin/rest/ $@
+
+#Compiles BST
+bst clean-bst debug-bst:
+	@echo Making BST
+	$(MAKE) $(DEBUG_PARMS) -C $(OPENAPPS_BASE)/src/apps/bst/ $@
+
+#Compiles Packet Trace
+packet_trace clean-packet_trace debug-packet_trace:
+	@echo Making PACKET TRACE
+	$(MAKE) $(DEBUG_PARMS) -C $(OPENAPPS_BASE)/src/apps/packet_trace/ $@
+
+
+#Creates shared library for SDK code
+$(openapps_so_library): $(OPENAPPS_BUILD_DELIVERABLES_DIR) ${SDK_LOCAL}  
+	$(eval openapps_lib_files := $(call rwildcard,$(OPENAPPS_OUTPATH)/libraries/,*.a))
+ifeq ($(TARGETOS_VARIANT),wrl_2.0)
+	$(LD) -shared -soname $(@F) -o $@ $(PLAT_OBJS) --whole-archive $(openapps_lib_files) --no-whole-archive -lc -lpthread -lm -lrt ${PLAT_LIBS}
+else
+	$(CC) ${CFLAGS} -shared -Wl,-soname,$(@F) -o $@ $(PLAT_OBJS) -Wl,--whole-archive $(openapps_lib_files) -Wl,--no-whole-archive -lc -lpthread -lm -lrt ${PLAT_LIBS}
+endif
+	$(STRIP) --strip-unneeded $@
+
+#openaps target depends on the appropriate driver
+openapps: $(sbdriver)
+
+#Compiles CJSON
+vend_cjson clean-vend_cjson debug-vend_cjson:
+	@echo Making CJSON
+	$(MAKE) $(DEBUG_PARMS) -C $(OPENAPPS_BASE)/vendor/cjson/ $@
+
+#Compiles System Module
+system clean-system debug-system::
+	@echo Making System
+	$(MAKE) $(DEBUG_PARMS) -C $(OPENAPPS_BASE)/src/infrastructure/system/ $@
+
+#Compiles Logging Module
+log clean-log debug-log:
+	@echo Making bviewLogging
+	$(MAKE) $(DEBUG_PARMS) -C $(OPENAPPS_BASE)/src/infrastructure/logging/ $@
+
+#Compiles Vendorinit
+vendorinit clean-vendorinit debug-vendorinit::
+	@echo Making VENDOR INIT
+	$(MAKE) $(DEBUG_PARMS) -C $(OPENAPPS_BASE)/vendor/driver/ $@
+ifeq ($(TARGETOS_VARIANT),wrl_2.0)
+	$(LD) -shared -soname libvendorinit.so.1 -o $(OPENAPPS_BUILD_DELIVERABLES_DIR)/libvendorinit.so.1 $(PLAT_OBJS) --whole-archive $(OPENAPPS_OUTPATH)/vendorinit/vendorinit.a --no-whole-archive -lc -lpthread -lm -lrt ${PLAT_LIBS}
+else
+	$(CC) ${CFLAGS} -shared -Wl,-soname,libvendorinit.so.1 -o $(OPENAPPS_BUILD_DELIVERABLES_DIR)/libvendorinit.so.1 $(PLAT_OBJS) -Wl,--whole-archive $(OPENAPPS_OUTPATH)/vendorinit/vendorinit.a -Wl,--no-whole-archive -lc -lpthread -lm -lrt ${PLAT_LIBS}
+endif
+
+
+sbredirector clean-sbredirector debug-sbredirector::
+	@echo Making SB-Redirector
+	$(MAKE) $(DEBUG_PARMS) -C $(OPENAPPS_BASE)/src/sb_plugin/sb_redirector/ $@
+
+
+# Simple file that contains version information.
+
+ifneq ($(dmode),)
+tar_options = --show-transformed-names -v
+endif
+
+#
+# These are targets for cleaning:
+#
+# clean: cleans all but the SDK (which takes the longest time to build)
+# clean-all: cleans everything
+#
+
+clean:
+	for dir in $$(find $(OPENAPPS_OUTPATH) -maxdepth 1 -mindepth 1 -type d) ; do 	\
+		if [ "`basename $$dir`" != "sdk" ]; then 			\
+			(cd $$dir; $(RM) -rf *); 				\
+			rmdir $$dir; 						\
+		fi 								\
+	done
+	rm -f $(OPENAPPS_OUTPATH)/agent.o
+	rm -f $(OPENAPPS_OUTPATH)/version.h
+
+clean-all: $(del_target) $(del_target_object)
+	for dir in $$(find $(OPENAPPS_OUTPATH) -maxdepth 1 -mindepth 1 -type d) ; do 	\
+		(cd $$dir; $(RM) -rf *); 					\
+		rmdir $$dir; 							\
+	done
+	rm -f $(OPENAPPS_OUTPATH)/agent.o
+	rm -f $(OPENAPPS_OUTPATH)/version.h
+	rm -rf $(PACKAGES_DIR)
+#
+# end of Command Line Targets
+#
+
+#
+# The rest of the targets are supporting targets.  These should never be specified in the make command.
+#
+
+openapps_out_dir: $(OPENAPPS_BUILD_DELIVERABLES_DIR) $(OPENAPPS_LIBRARIES_DIR) $(OPENAPP_DELIVERABLES_DIR)
+
+$(OPENAPPS_BUILD_DELIVERABLES_DIR) $(OPENAPPS_LIBRARIES_DIR) $(OPENAPP_DELIVERABLES_DIR):
+	mkdir -p $@
+
+
+#
+# Debugging targets
+#
+dump-variables:
+	@echo AR 			= $(AR)
+	@echo AS 			= $(AS)
+	@echo CC 			= $(CC)
+	@echo CFLAGS 		    	= $(CFLAGS)
+	@echo DYNLIB_FLAGS          = $(DYNLIB_FLAGS)
+	@echo CROSS_COMPILE 		= $(CROSS_COMPILE)
+	@echo DEBUG_OPTIMIZE 		= $(DEBUG_OPTIMIZE)
+	@echo DEBUG_PARMS 		= $(DEBUG_PARMS)
+	@echo DEBUG_SYMBOLS 		= $(DEBUG_SYMBOLS)
+	@echo OPENAPPS_BUILD_DELIVERABLES_DIR 		= $(OPENAPPS_BUILD_DELIVERABLES_DIR)
+	@echo OPENAPP_DELIVERABLES_DIR 	= $(OPENAPP_DELIVERABLES_DIR)
+	@echo CPU			= $(CPU)
+	@echo BCM_CPU_ARCH		= $(BCM_CPU_ARCH)
+	@echo TARGETOS_VARIANT          = $(TARGETOS_VARIANT)
+	@echo LD 			= $(LD)
+	@echo LDFLAGS 			= $(LDFLAGS)
+	@echo LINUX_INCLUDE 		= $(LINUX_INCLUDE)
+	@echo MAKE_LOCAL 		= $(MAKE_LOCAL)
+	@echo NM 			= $(NM)
+	@echo NO_LOCAL_TARGETS 		= $(NO_LOCAL_TARGETS)
+	@echo OBJCOPY 			= $(OBJCOPY)
+	@echo OBJDUMP 			= $(OBJDUMP)
+	@echo OPENAPPS_BASE 		= $(OPENAPPS_BASE)
+	@echo OPENAPPS_CFLAGS 		= $(OPENAPPS_CFLAGS)
+	@echo OPENAPPS_RELEASE 		= $(OPENAPPS_RELEASE)
+	@echo OPENAPPS_OUTPATH 		= $(OPENAPPS_OUTPATH)
+	@echo OF_ONIE_DIR 		= $(OF_ONIE_DIR)
+	@echo PERL 			= $(PERL)
+	@echo BCM_REL_NUM      = $(BCM_REL_NUM)
+	@echo BCM_VER_NUM      = $(BCM_VER_NUM)
+	@echo BCM_MAINT_NUM    = $(BCM_MAINT_NUM)
+	@echo BCM_BUILD_NUM    = $(BCM_BUILD_NUM)
+	@echo PLATFORM_CODE 		= $(PLATFORM_CODE)
+	@echo QUIET 			= $(QUIET)
+	@echo RANLIB 			= $(RANLIB)
+	@echo RM 			= $(RM)
+	@echo SDK 			= $(SDK)
+	@echo SDK_PATCH 		= $(SDK_PATCH)
+	@echo SDKBUILD 			= $(SDKBUILD)
+	@echo SDK_LOCAL 		= $(SDK_LOCAL)
+	@echo OPENAPPS_SDK_PATCH	= $(OPENAPPS_SDK_PATCH)
+	@echo SED 			= $(SED)
+	@echo SPLINT 			= $(SPLINT)
+	@echo STRIP 			= $(STRIP)
+	@echo VIEWNAME 			= $(VIEWNAME)
+	@echo a_generated_file 		= $(a_generated_file)
+	@echo build_specific_files 	= $(build_specific_files)
+	@echo core_archive 		= $(core_archive)
+	@echo dmode 			= $(dmode)
+	@echo platform 			= $(platform)
+	@echo openapps_so_library 	= $(openapps_so_library)
+	@echo sdk_release	    	= $(sdk_release)
+	@echo PLAT_LIBS 	    	= $(PLAT_LIBS)
+	@echo OUTPATH   	    	= $(OUTPATH)
+	@echo dynamic_sb_lib   	    	= $(dynamic_sb_lib)
+	@echo common_include_list   	= $(common_include_list)
