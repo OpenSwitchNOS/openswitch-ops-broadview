@@ -129,6 +129,8 @@ class bstTest( OpsVsiTest ):
     def start_agent(self):
         sw_type = self.config_dict.get('switch_type',"").strip()
         if sw_type in ['',"genericx86-64"]:
+            self.s1.cmd("/usr/bin/bufmond")
+            time.sleep(3)
             out = self.s1.cmd("/usr/bin/ops-broadview &")
             time.sleep(60)
             out = self.s1.cmd("pgrep ops-broadview")
@@ -169,7 +171,12 @@ class Test_bstd:
 
     def setup_class(cls):
         # Create the Mininet topology based on mininet.
-        Test_bstd.test = bstTest()
+        pw, f = os.path.split(__file__)
+        switchmounts=[pw + "/bufmondsim.yaml:/etc/openswitch/platform/Generic-x86/X86-64/bufmond.yaml"]
+        if sw_type in ['',"genericx86-64"]:
+            Test_bstd.test = bstTest(switchmounts=switchmounts)
+        else:
+            Test_bstd.test = bstTest()
         Test_bstd.test.getConfigDetails("serverDetails.ini","server_details")
         Test_bstd.test.getSwitchIp()
         Test_bstd.test.start_agent()

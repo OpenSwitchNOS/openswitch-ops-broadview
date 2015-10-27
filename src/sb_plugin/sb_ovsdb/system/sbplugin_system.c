@@ -122,7 +122,7 @@ BVIEW_STATUS sbplugin_ovsdb_system_init (BVIEW_SB_SYSTEM_FEATURE_t    *ovsdbSyst
   unsigned int     num_front_panel_ports = 0;
   unsigned int     index = 0;
   unsigned int     unit = 0;
-  unsigned int     num_ports = 100;
+  unsigned int     num_ports = 72;
   unsigned int     max_units = 0;
 
   if (ovsdbSystemFeat == NULL)
