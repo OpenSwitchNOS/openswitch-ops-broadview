@@ -303,11 +303,11 @@ BVIEW_STATUS bst_bid_port_index_to_ovsdb_key(int asic, int bid,
       {
         SB_OVSDB_DEBUG_PRINT("Not enough memory in source string");
       }
+      strcat(src_string, delim);
     }
  
 
     sprintf(index_str, "%d", index);
-    strcat(src_string, delim);
     strncat(src_string, index_str, src_str_empty_size);
     src_str_empty_size -= strlen(src_string);
     if (src_str_empty_size < 2)

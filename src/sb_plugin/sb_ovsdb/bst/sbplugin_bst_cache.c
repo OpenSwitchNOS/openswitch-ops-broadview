@@ -209,7 +209,7 @@ BVIEW_STATUS bst_ovsdb_cache_row_get (int asic, char *ovsdb_key,
   /* If it is double indexed then port is @first index */
   if (bid_tab_params[bid].is_double_indexed == true)
   {
-    index = ((atoi(index1) -1) * bid_tab_params[bid].num_of_columns) + atoi(index2);
+    index = ((atoi(index1) -1) * bid_tab_params[bid].num_of_columns) + (atoi(index2)-1);
   }
   else
   {

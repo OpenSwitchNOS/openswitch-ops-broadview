@@ -252,8 +252,9 @@ BVIEW_STATUS sbplugin_ovsdb_bst_config_set (int asic, BVIEW_BST_CONFIG_t *data)
   
   config.bst_enable           = data->enableStatsMonitoring;
   config.bst_tracking_mode    = (int) data->mode; 
-  config.periodic_collection  = data->enablePeriodicCollection;
-  config.collection_interval  = data->collectionPeriod;
+  /* Periodic collection should be enabled whenever bst is enabled.
+     This flag is used to collect BST stats periodically and update OVSDB by bufmon_stats thread */ 
+  config.periodic_collection  = config.bst_enable;
 
   rv = bst_ovsdb_bst_config_set(asic, &config);
   if (BVIEW_STATUS_SUCCESS != rv)

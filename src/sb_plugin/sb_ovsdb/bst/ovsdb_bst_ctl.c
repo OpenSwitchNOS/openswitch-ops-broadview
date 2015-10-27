@@ -59,8 +59,8 @@
 
 #define   BST_OVSDB_THRESHOLD_JSON    "[\"OpenSwitch\",{\"op\":\"update\",\"table\":\"bufmon\",\"row\":{\"trigger_threshold\":%lld},\"where\":[[\"name\",\"==\", \"%s\"]]}]"
 
-#define   BST_OVSDB_CONFIG_JSON_FORMAT       "[\"OpenSwitch\",{\"op\":\"update\",\"table\":\"System\",\"row\":{\"bufmon_config\":[\"map\",[[\"enabled\",\"%s\"], [\"counters_mode\",\"%s\"], [\"periodic_collection_enabled\",\"%s\"],[\"collection_period\",\"%s\"]]]} , \"where\":[[\"_uuid\",\"==\",[\"uuid\", \"%s\"]]]}]"
 
+#define   BST_OVSDB_CONFIG_JSON_FORMAT       "[\"OpenSwitch\",{\"op\":\"update\",\"table\":\"System\",\"row\":{\"bufmon_config\":[\"map\",[[\"enabled\",\"%s\"], [\"counters_mode\",\"%s\"], [\"periodic_collection_enabled\",\"%s\"]]]} , \"where\":[[\"_uuid\",\"==\",[\"uuid\", \"%s\"]]]}]"
 
 #define  BST_JSON_MONITOR_BUFMON   "[\"OpenSwitch\",null,{\"bufmon\":[{\"columns\":[\"counter_value\",\"counter_vendor_specific_info\",\"enabled\",\"hw_unit_id\",\"name\",\"status\",\"trigger_threshold\",\"_version\"]}], \"System\":[{\"columns\":[\"bufmon_config\"]},{\"columns\":[\"bufmon_info\"]}]}]"
 
@@ -260,12 +260,12 @@ bst_system_bufmon_config_update (struct json *json_object)
       else if (strcmp (key->u.string, "enabled") ==0)
       {
          bufmon_config->bst_enable = 
-               ((strcmp (value->u.string, "true") == 0)? true : false);  
+               ((strcmp (value->u.string, "True") == 0)? true : false);  
       }
       else if (strcmp (key->u.string, "periodic_collection_enabled") ==0)
       {
          bufmon_config->periodic_collection  =
-               ((strcmp (value->u.string, "true") == 0)? true : false);
+               ((strcmp (value->u.string, "True") == 0)? true : false);
       }
       else if (strcmp (key->u.string, "collection_period") ==0) 
       {
@@ -629,6 +629,8 @@ bst_ovsdb_monitor()
   }
 }
 
+int count  = 0;
+static struct jsonrpc *rpc;
 /*********************************************************************
 * @brief       Commit column "trigger_threshold" in table "bufmon" to 
 *              OVSDB database.
@@ -650,10 +652,11 @@ BVIEW_STATUS bst_ovsdb_threshold_commit (int asic , int port, int index,
   char   s_transact[1024] = {0};
   char   s_key[1024]       = {0};
   struct json *transaction;
-  struct jsonrpc_msg *request, *reply;
-  struct jsonrpc *rpc;
+  struct jsonrpc_msg *request;
   char connectMode[OVSDB_CONFIG_MAX_LINE_LENGTH]; 
   BVIEW_STATUS   rv = BVIEW_STATUS_SUCCESS;
+  int error = 0;
+  
   /* Get Row name */
   rv = bst_bid_port_index_to_ovsdb_key (asic, bid, port, index, 
                                         s_key, sizeof(s_key));
@@ -669,23 +672,29 @@ BVIEW_STATUS bst_ovsdb_threshold_commit (int asic , int port, int index,
 
   transaction = json_from_string(s_transact);
   request = jsonrpc_create_request("transact", transaction, NULL);
+  if (count == 0)
+  { 
   memset (&connectMode[0], 0, OVSDB_CONFIG_MAX_LINE_LENGTH);
   if (ovsdb_file_read(connectMode) != BVIEW_STATUS_SUCCESS)
   {
     /*Set default connection mode*/
     memset (&connectMode[0], 0, OVSDB_CONFIG_MAX_LINE_LENGTH);
     ovsdb_set_default(connectMode);
-  } 
-  rpc = open_jsonrpc (connectMode);
-  if (rpc == NULL)
-  { 
-    SB_OVSDB_LOG (BVIEW_LOG_ERROR,
-                 "Trigger_threshold commit:Failed to open JSNON RPC session");
-    return BVIEW_STATUS_FAILURE;
   }
-  check_txn(jsonrpc_transact_block(rpc, request, &reply),&reply);
-  jsonrpc_msg_destroy(reply);
-  jsonrpc_close(rpc);
+    rpc = open_jsonrpc (connectMode);
+    if (rpc == NULL)
+    { 
+      SB_OVSDB_LOG (BVIEW_LOG_ERROR,
+                 "Trigger_threshold commit:Failed to open JSNON RPC session");
+      return BVIEW_STATUS_FAILURE;
+    }
+    count++;
+  }
+  error = jsonrpc_send (rpc, request);
+  if (error)
+  {
+   SB_OVSDB_LOG (BVIEW_LOG_ERROR,"\r\n Failed set threshold\r\n");
+  }
   return BVIEW_STATUS_SUCCESS;
 }
 
@@ -718,10 +727,9 @@ BVIEW_STATUS bst_ovsdb_bst_config_commit (int asic ,
   sprintf (buf, "%d",config->collection_interval);
   /* Create JSON request*/ 
   BST_OVSDB_FORM_CONFIG_JSON (s_transact, BST_OVSDB_CONFIG_JSON_FORMAT,
-                              (config->bst_enable ? "true":"false"),
+                              (config->bst_enable ? "True":"False"),
                               ((config->bst_tracking_mode == BVIEW_BST_MODE_PEAK) ? "peak":"current"),
-                              (config->periodic_collection ? "true":"false"), 
-                              buf,
+                              (config->periodic_collection ? "True":"False"), 
                               system_table_uuid);
                                   
   transaction = json_from_string(s_transact);
