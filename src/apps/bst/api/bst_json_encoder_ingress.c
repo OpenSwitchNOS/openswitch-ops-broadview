@@ -48,7 +48,7 @@ static BVIEW_STATUS _jsonencode_report_ingress_ippg ( char *buffer, int asicId,
     bool includePort = false;
     uint64_t val1 = 0;
     uint64_t val2 = 0;
-    uint64_t defaultVal = 0;
+    uint64_t maxBufVal = 0;
     int sendIncrReport = options->sendIncrementalReport;
 
 
@@ -153,12 +153,13 @@ static BVIEW_STATUS _jsonencode_report_ingress_ippg ( char *buffer, int asicId,
                 continue;
 
             val1 = current->iPortPg.data[port - 1][priGroup - 1].umShareBufferCount;
-            defaultVal = options->bst_defaults_ptr->iPortPg.data[port - 1][priGroup - 1].umShareBufferCount;
-            bst_json_convert_data(options, asic, &val1, defaultVal);
+            maxBufVal = options->bst_max_buffers_ptr->iPortPg.data[port - 1][priGroup - 1].umShareMaxBuf;
+            bst_json_convert_data(options, asic, &val1, maxBufVal);
 
             val2 = current->iPortPg.data[port - 1][priGroup - 1].umHeadroomBufferCount;
-            defaultVal = options->bst_defaults_ptr->iPortPg.data[port - 1][priGroup - 1].umHeadroomBufferCount;
-            bst_json_convert_data(options, asic, &val2, defaultVal);
+            maxBufVal = options->bst_max_buffers_ptr->iPortPg.data[port - 1][priGroup - 1].umHeadroomMaxBuf;
+            bst_json_convert_data(options, asic, &val2, maxBufVal);
+
 
             /* add the data to the report */
             _JSONENCODE_COPY_FORMATTED_STRING_AND_ADVANCE(actualLength, buffer, remLength, length,
@@ -207,7 +208,7 @@ static BVIEW_STATUS _jsonencode_report_ingress_ipsp ( char *buffer, int asicId,
     int actualLength  = 0;
     bool includePort = false;
     uint64_t val = 0;
-    uint64_t defaultVal = 0;
+    uint64_t maxBufVal = 0;
     int sendIncrReport = options->sendIncrementalReport;
 
     int includeServicePool[BVIEW_ASIC_MAX_SERVICE_POOLS] = { 0 };
@@ -306,8 +307,8 @@ static BVIEW_STATUS _jsonencode_report_ingress_ipsp ( char *buffer, int asicId,
                 continue;
 
             val = current->iPortSp.data[port - 1][pool - 1].umShareBufferCount;
-            defaultVal = options->bst_defaults_ptr->iPortSp.data[port - 1][pool - 1].umShareBufferCount;
-            bst_json_convert_data(options, asic, &val, defaultVal);
+            maxBufVal = options->bst_max_buffers_ptr->iPortSp.data[port - 1][pool - 1].umShareMaxBuf;
+            bst_json_convert_data(options, asic, &val, maxBufVal);
 
             /* add the data to the report */
             _JSONENCODE_COPY_FORMATTED_STRING_AND_ADVANCE(actualLength, buffer, remLength, length,
@@ -356,7 +357,7 @@ static BVIEW_STATUS _jsonencode_report_ingress_sp ( char *buffer, int asicId,
     int actualLength  = 0;
     int pool = 0;
     uint64_t val = 0;
-    uint64_t defaultVal = 0;
+    uint64_t maxBufVal = 0;
     int sendIncrReport = options->sendIncrementalReport;
 
     char *ispTemplate = " { \"realm\": \"ingress-service-pool\", \"%s\": [ ";
@@ -392,9 +393,8 @@ static BVIEW_STATUS _jsonencode_report_ingress_sp ( char *buffer, int asicId,
             continue;
 
              val = current->iSp.data[pool-1].umShareBufferCount;
-             defaultVal = options->bst_defaults_ptr->iSp.data[pool-1].umShareBufferCount;
-             bst_json_convert_data(options, asic, &val, defaultVal);
-
+             maxBufVal = options->bst_max_buffers_ptr->iSp.data[pool-1].umShareMaxBuf;
+             bst_json_convert_data(options, asic, &val, maxBufVal);
         /* Now that this pool needs to be included in the report, add the data to report */
         _JSONENCODE_COPY_FORMATTED_STRING_AND_ADVANCE(actualLength, buffer, remLength, length,
                                                       ispServicePoolTemplate, pool-1, val);

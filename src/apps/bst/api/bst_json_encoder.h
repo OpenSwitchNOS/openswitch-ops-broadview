@@ -50,7 +50,7 @@ typedef struct _bst_reporting_options_
     BVIEW_BST_TRIGGER_INFO_t triggerInfo;
     bool sendIncrementalReport;
     bool statsInPercentage;
-    BVIEW_BST_ASIC_SNAPSHOT_DATA_t *bst_defaults_ptr;
+    BVIEW_SYSTEM_ASIC_MAX_BUF_SNAPSHOT_DATA_t *bst_max_buffers_ptr;
 } BSTJSON_REPORT_OPTIONS_t;
 
 /* structure to map the realms and indices */
@@ -114,11 +114,6 @@ BVIEW_STATUS bstjson_encode_get_bst_feature(int asicId,
                                             uint8_t **pJsonBuffer
                                             );
 
-BVIEW_STATUS bstjson_encode_get_switch_properties ( int asicId,
-                                            int method,
-                                            BVIEW_SWITCH_PROPERTIES_t *pData,
-                                            uint8_t **pJsonBuffer
-                                            );
 
 BVIEW_STATUS bstjson_encode_get_bst_tracking(int asicId,
                                              int method,

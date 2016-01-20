@@ -157,7 +157,17 @@ extern "C"
             return BVIEW_STATUS_INVALID_JSON; \
     } \
     } while(0)
+
+
+ #define JSON_LAG_MAP_TO_NOTATION(_port, _asic, _portStr) do { \
+    BVIEW_STATUS rv = sbapi_system_lag_translate_to_notation((_asic), (int)(_port), (_portStr)); \
+    if (rv != BVIEW_STATUS_SUCCESS) { \
+            _jsonlog("The lag can't be converted to external notation %d ", (int)(_port)); \
+            return BVIEW_STATUS_INVALID_JSON; \
+    } \
+    } while(0)
     
+   
 #ifdef __cplusplus
 }
 #endif

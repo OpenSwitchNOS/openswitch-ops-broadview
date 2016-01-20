@@ -68,24 +68,41 @@ static BVIEW_STATUS rest_validate_http_method(char *method)
 /******************************************************************
  * @brief  validates a string , whether its a supported URL or not 
  *
- * @param[in]   method    string for validation
+ * @param[in]   url    string for validation
+ * @param[in]   feature    feature string
  *
  * @retval   BVIEW_STATUS_SUCCESS if the string is a valid URL
  * @retval   BVIEW_STATUS_FAILURE otherwise
  * 
  * @note     
  *********************************************************************/
-static BVIEW_STATUS rest_validate_url(char *url)
+static BVIEW_STATUS rest_validate_url(char *url, char *featureName, char *restMethod)
 {
-    /* currently hard-coded for BST */
-    if ((strstr(url, "broadview/bst/") != NULL) ||
-        (strstr(url, "broadview/packettrace/") != NULL) || 
-        (strstr(url, "broadview/")))
-    {
-        return BVIEW_STATUS_SUCCESS;
-    }
+  char *tempUrl = "%s/%s/%s";
+  char *tempSystemUrl = "%s/%s";
 
+  char command[128];
+
+  memset (command, 0, 128);
+
+  if (NULL == url)
     return BVIEW_STATUS_FAILURE;
+
+
+  if ('\0' != featureName[0])
+  {
+    sprintf(command, tempUrl, BVIEW_AGENT_SW_NAME, featureName, restMethod);
+  }
+  else 
+  {
+    sprintf(command, tempSystemUrl, BVIEW_AGENT_SW_NAME, restMethod);
+  }
+
+  if (NULL == strstr (url, command))
+  {
+    return BVIEW_STATUS_FAILURE;
+  }
+  return BVIEW_STATUS_SUCCESS;
 }
 
 /******************************************************************
@@ -103,6 +120,9 @@ static BVIEW_STATUS rest_parse_http_request_to_session (REST_SESSION_t *session)
     char *httpMethod, *url, *json, *restMethod;
     BVIEW_STATUS status;
     int temp = 0, urlLength = 0;
+    char featureName[BVIEW_MAX_FEATURE_NAME_LEN];
+
+    memset (featureName, 0, sizeof(featureName));
 
     /* raw http data is available @ session->buffer */
     /* This needs to be parsed into httpMethod, URL and the JSON body */
@@ -122,11 +142,6 @@ static BVIEW_STATUS rest_parse_http_request_to_session (REST_SESSION_t *session)
     url = strtok(buf, REST_HTTP_SPACE);
     _REST_ASSERT_NET_ERROR((url != NULL), "REST : Invalid HTTP Request \n");
 
-    /* validate the URL */
-    status = rest_validate_url(url);
-    _REST_ASSERT_NET_ERROR((status == BVIEW_STATUS_SUCCESS),
-                           "REST : Unsupported URL \n");
-
     /* obtain the REST method */
     restMethod = url;
     urlLength = strlen(url);
@@ -139,6 +154,17 @@ static BVIEW_STATUS rest_parse_http_request_to_session (REST_SESSION_t *session)
                 restMethod = &url[temp + 1];
         }
     }
+
+     /* get the feature name for the rest method */
+    status = modulemgr_rest_api_feature_name_get(restMethod, &featureName[0]);
+    _REST_ASSERT_NET_ERROR((status == BVIEW_STATUS_SUCCESS),
+                           "REST : Unable to find the feature for the command \n");
+
+    /* validate the URL */
+    status = rest_validate_url(url, &featureName[0], restMethod);
+    _REST_ASSERT_NET_ERROR((status == BVIEW_STATUS_SUCCESS),
+                           "REST : Unsupported URL \n");
+
 
     /* move buf, past the URL, this should now point to HTTP header, */
     buf += urlLength + 1;

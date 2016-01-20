@@ -47,6 +47,7 @@ extern "C"
 #define BVIEW_TD2_CPU_COSQ            8
 #define BVIEW_TD2_CELL_TO_BYTE        208
 
+#define  BVIEW_SYSTEM_NUM_COS_PORT    8
 #define    BVIEW_OVSDB_PORT_GET(_port)   \
                (_port = _port);
 
@@ -59,6 +60,29 @@ extern "C"
 #define    BVIEW_OVSDB_APP_ASIC_GET(_asic) \
                ((_asic) = asicAppMap[_asic]);
 
+#define    BVIEW_OVSDB_LAG_GET(_port)   \
+               (_port = _port+1);
+
+/* Macro to iterate all ports*/
+#define  BVIEW_SYSTEM_PORT_ITER(_asic,_port)                                         \
+              for ((_port) = 1; (_port) <= asicDb[(_asic)].scalingParams.numPorts; (_port)++)
+
+/* Macro to iterate all Priority Groups*/
+#define  BVIEW_SYSTEM_PG_ITER(_pg)                                                 \
+              for ((_pg) = 0; (_pg) < BVIEW_ASIC_MAX_PRIORITY_GROUPS; (_pg)++)
+
+/* Macro to iterate all Service Pools*/                           
+#define  BVIEW_SYSTEM_SP_ITER(_sp)                                                 \
+              for ((_sp) = 0; (_sp) < BVIEW_ASIC_MAX_SERVICE_POOLS; (_sp)++)
+
+/* Macro to iterate all Service Pools + Common Service Pool*/
+#define  BVIEW_SYSTEM_TOTAL_SP_ITER(_sp)                                           \
+              for ((_sp) = 0; (_sp) < BVIEW_ASIC_MAX_INGRESS_SERVICE_POOLS; (_sp)++)
+
+
+/* Macro to iterate 'n'  times*/
+#define BVIEW_SYSTEM_ITER(_index,_n)                              \
+              for ((_index) = 0; (_index) < (_n); (_index)++)
 extern BVIEW_ASIC_t                 asicDb[];
 
 /*********************************************************************
@@ -242,6 +266,61 @@ BVIEW_STATUS sbplugin_ovsdb_valid_unit_check(unsigned int unit);
 *
 *********************************************************************/
 BVIEW_STATUS  sbplugin_ovsdb_system_network_os_get (uint8_t *buffer, int length);
+
+/*********************************************************************
+* @brief  Get the UID of the system
+*
+* @param[out] buffer                         - buffer
+* @param[in]  length                         - length of the buffer
+*
+* @retval  BVIEW_STATUS_SUCCESS            if UID get is success.
+* @retval  BVIEW_STATUS_FAILURE            if UID get is failed.
+* @retval  BVIEW_STATUS_INVALID_PARAMETER  if input parameter is invalid.
+*
+* @notes   get the UID of the system 
+*
+*
+*********************************************************************/
+BVIEW_STATUS sbplugin_ovsdb_system_uid_get (unsigned char *buffer, 
+                                           int length);
+
+/*********************************************************************
+* @brief   Translate lag number to lag string notation.
+*
+* @param[in]   asic                         - ASIC 
+* @param[in]   lag                          - lag Number
+* @param[out]  dst                          - ASIC String
+*
+* @retval  BVIEW_STATUS_SUCCESS            if lag Tranlate is success.
+* @retval  BVIEW_STATUS_FAILURE            if lag Tranlate is failed.
+* @retval  BVIEW_STATUS_INVALID_PARAMETER  if input parameter is invalid.
+*
+* @notes  
+*
+*
+*********************************************************************/
+BVIEW_STATUS sbplugin_ovsdb_system_lag_translate_to_notation (int asic, 
+                                                             int lag, 
+                                                             char *dst);
+/*********************************************************************
+* @brief  Get snapshot of max buffers allocated  
+*
+*
+* @param  [in]  asic                         - unit
+* @param[out]  maxBufSnapshot                - Max buffers snapshot
+* @param[out]  time                          - time
+*
+* @retval BVIEW_STATUS_INVALID_PARAMETER if input data is invalid.
+* @retval BVIEW_STATUS_FAILURE           if snapshot is succes.
+* @retval BVIEW_STATUS_SUCCESS           if snapshot set is failed.
+*
+* @notes    none
+*
+*
+*********************************************************************/
+BVIEW_STATUS sbplugin_ovsdb_system_max_buf_snapshot_get (int asic, 
+                              BVIEW_SYSTEM_ASIC_MAX_BUF_SNAPSHOT_DATA_t *maxBufSnapshot,
+                              BVIEW_TIME_t * time);
 
 #ifdef __cplusplus
 }

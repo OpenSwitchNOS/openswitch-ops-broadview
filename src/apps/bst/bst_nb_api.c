@@ -27,7 +27,6 @@
 #include "get_bst_feature.h"
 #include "get_bst_thresholds.h"
 #include "get_bst_report.h"
-#include "get_switch_properties.h"
 #include "bst_json_encoder.h"
 #include "system.h"
 #include "bst.h"
@@ -564,45 +563,6 @@ BVIEW_STATUS bstjson_get_bst_feature_impl (void *cookie, int asicId, int id,
   {
     LOG_POST (BVIEW_LOG_ERROR,
         "failed to post get bst feature to bst queue. err = %d.\r\n",rv);
-  }
-  return rv;
-}
-
-/*********************************************************************
-* @brief : REST API handler to get switch properties params
-*
-* @param[in] cookie : pointer to the cookie
-* @param[in] asicId : asic id
-* @param[in] id     : unit id
-* @param[in] pCommand : pointer to the input command structure
-*
-* @retval  : BVIEW_STATUS_SUCCESS : the message is successfully posted 
-*            to bst queue.
-* @retval  : BVIEW_STATUS_FAILURE : failed to post the message to bst.
-* @retval  : BVIEW_STATUS_INVALID_PARAMETER : invalid parameter.
-*
-* @note    : This api posts the request to bst application to get 
-*            switch properties params.
-*
-*********************************************************************/
-BVIEW_STATUS bstjson_get_switch_properties_impl (void *cookie, int asicId, 
-                                                 int id,
-                                                 BSTJSON_GET_SWITCH_PROPERTIES_t *pCommand)
-{
-  BVIEW_BST_REQUEST_MSG_t msg_data;
-  BVIEW_STATUS rv;
-
-  memset (&msg_data, 0, sizeof (BVIEW_BST_REQUEST_MSG_t));
-  msg_data.unit = asicId;
-  msg_data.cookie = cookie;
-  msg_data.msg_type = BVIEW_BST_CMD_API_GET_SWITCH_PROPERTIES;
-  msg_data.id = id;
-  /* send message to bst application */
-  rv = bst_send_request (&msg_data);
-  if (BVIEW_STATUS_SUCCESS != rv)
-  {
-    LOG_POST (BVIEW_LOG_ERROR,
-        "failed to post get switch properties to bst queue. err = %d.\r\n",rv);
   }
   return rv;
 }

@@ -171,8 +171,6 @@ typedef enum _bst_cmd_ {
   BVIEW_BST_CMD_API_CLEAR_TRIGGER_COUNT,
   BVIEW_BST_CMD_API_ENABLE_BST_ON_TRIGGER,
   BVIEW_BST_CMD_API_TRIGGER_COLLECT,
-   /*  Switch Properties */
-  BVIEW_BST_CMD_API_GET_SWITCH_PROPERTIES,
   BVIEW_BST_CMD_API_MAX
 }BVIEW_FEATURE_BST_CMD_API_t;
 
@@ -240,7 +238,6 @@ typedef enum _bst_cmd_ {
     BVIEW_BST_REPORT_TYPE_t report_type; 
     BVIEW_ASIC_CAPABILITIES_t  *asic_capabilities;
     BVIEW_BST_REPORT_OPTIONS_t options;
-    BVIEW_SWITCH_PROPERTIES_t  *switchProperties;
     BVIEW_STATUS rv; /* return value for set request */
     union
     {
@@ -273,8 +270,8 @@ typedef struct _bst_context_unit_info__
   /* threshold records */
   BVIEW_BST_REPORT_SNAPSHOT_t *threshold_record_ptr;
 
-  /* place holder to store the default bst buffer settings */
-  BVIEW_BST_ASIC_SNAPSHOT_DATA_t bst_defaults;
+  /* place holder to store the bst max buffer settings */
+  BVIEW_SYSTEM_ASIC_MAX_BUF_SNAPSHOT_DATA_t bst_max_buffers;
 
   /* config data */
   BVIEW_BST_DATA_t *bst_data;
@@ -298,9 +295,6 @@ typedef struct _bst_context_unit_info__
 typedef struct _bst_context_info__
 {
   BVIEW_BST_UNIT_CXT_t unit[BVIEW_BST_MAX_UNITS];
-  /* Switch Properties*/
-  BVIEW_SWITCH_PROPERTIES_t  *switchProperties;
-  
   /* BST Key to Queue Message*/
   key_t key1;
   key_t trigger_key;

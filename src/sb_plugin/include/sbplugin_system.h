@@ -26,6 +26,7 @@ extern "C"
 
 #include "broadview.h"
 #include "sbplugin.h"
+#include "system.h"
 
     /** The System Southbound Feature Definition */
 
@@ -68,6 +69,15 @@ extern "C"
  
         /** Get network OS*/
         BVIEW_STATUS(*system_network_os_get_cb) (uint8_t *buffer, int length);        
+
+        /** Obtain System UID */
+        BVIEW_STATUS(*system_uid_get_cb)(uint8_t *buffer, int length);
+        /** Get lag String from lag Number*/
+        BVIEW_STATUS(*system_lag_translate_to_notation_cb) (int asic, int port, char *dst);        
+        /** Get snapshot of max buffers allocated  */
+	    BVIEW_STATUS(*system_max_buf_snapshot_get_cb)(int asic, 
+                            BVIEW_SYSTEM_ASIC_MAX_BUF_SNAPSHOT_DATA_t *maxBufSnapshot,
+                            BVIEW_TIME_t * time);
 
     } BVIEW_SB_SYSTEM_FEATURE_t;
 

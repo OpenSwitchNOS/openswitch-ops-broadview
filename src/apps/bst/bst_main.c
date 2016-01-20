@@ -48,7 +48,6 @@
 extern BVIEW_BST_CXT_t bst_info;
 /* BST Mutex*/
 pthread_mutex_t *bst_mutex;
-//pthread_rwlock_t *bst_configRWLock;
 
 /*********************************************************************
  * @brief : function to return the api handler for the bst command type 
@@ -77,8 +76,7 @@ BVIEW_STATUS bst_type_api_get (int type, BVIEW_BST_API_HANDLER_t *handler)
     {BVIEW_BST_CMD_API_CLEAR_THRESHOLD, bst_clear_threshold_set},
     {BVIEW_BST_CMD_API_CLEAR_STATS, bst_clear_stats_set},
     {BVIEW_BST_CMD_API_CLEAR_TRIGGER_COUNT, bst_clear_trigger_count},
-    {BVIEW_BST_CMD_API_ENABLE_BST_ON_TRIGGER, bst_enable_on_trigger_timer_expiry},
-    {BVIEW_BST_CMD_API_GET_SWITCH_PROPERTIES, system_switch_properties_get}
+    {BVIEW_BST_CMD_API_ENABLE_BST_ON_TRIGGER, bst_enable_on_trigger_timer_expiry}
   };
 
   for (i = 0; i < BVIEW_BST_CMD_API_MAX-1; i++)
@@ -223,7 +221,6 @@ BVIEW_STATUS bst_app_main (void)
   unsigned int rcvd_err = 0;
   unsigned int id = 0, num_units = 0;
   BVIEW_BST_API_HANDLER_t handler;
-  BVIEW_SWITCH_PROPERTIES_t  *pswitchProp = bst_info.switchProperties;
 
   if (BVIEW_STATUS_SUCCESS != bst_module_register ())
   {
@@ -240,25 +237,6 @@ BVIEW_STATUS bst_app_main (void)
     LOG_POST (BVIEW_LOG_ERROR, "Failed to get num of units\r\n");
     return BVIEW_STATUS_FAILURE;
   }
-  /* NULLPTR check*/
-  if (pswitchProp == NULL)
-  {
-    return BVIEW_STATUS_FAILURE;
-  }
-  pswitchProp->numAsics = num_units;
-  /* Get Supported feature mask*/
-  if (BVIEW_STATUS_SUCCESS !=
-      sbapi_system_feature_mask_get (&pswitchProp->featureMask))
-  {
-    return BVIEW_STATUS_FAILURE;
-  }
-  /* get the network OS or Plugin*/
-  if (BVIEW_STATUS_SUCCESS !=
-      sbapi_system_network_os_get (&pswitchProp->networkOs[0], 
-                                   BVIEW_NETWORK_OS_LEN_MAX))
-  {
-    return BVIEW_STATUS_FAILURE;
-  }
 
   for (id = 0; id < num_units; id++)
   {
@@ -272,34 +250,7 @@ BVIEW_STATUS bst_app_main (void)
       return BVIEW_STATUS_FAILURE;
     }
 
-     /* Get asic notation*/
-    if (BVIEW_STATUS_SUCCESS != 
-        sbapi_system_asic_translate_to_notation (id,
-                              pswitchProp->asicInfo[id].asic_notation))
-    {
-       return BVIEW_STATUS_FAILURE;
-    }
-      
-    /* Get ASIC type*/
-    if (BVIEW_STATUS_SUCCESS != 
-        sbapi_system_unit_to_asic_type_get (id,
-                             &pswitchProp->asicInfo[id].asicType))
-    {
-       return BVIEW_STATUS_FAILURE;
-    }
-
-     /* get the bst buffer default values */
-    if (BVIEW_STATUS_SUCCESS != sbapi_bst_default_snapshot_get(id, 
-                                          &bst_info.unit[id].bst_defaults))
-    {
-        /* unable to get the default values 
-           log error and return */
-       LOG_POST (BVIEW_LOG_ERROR, 
-               "Failed to Get Asic capabilities for unit %d. \r\n", id);
-       return BVIEW_STATUS_FAILURE;
-    }
-    
-     /* get the asic capabilities of the system 
+      /* get the asic capabilities of the system 
       * save the same so that the same can be reused 
       */
     if (BVIEW_STATUS_SUCCESS != sbapi_system_asic_capabilities_get(id, 
@@ -332,8 +283,6 @@ BVIEW_STATUS bst_app_main (void)
            bst_info.unit[id].asic_capabilities.numPriorityGroups 
           ); 
     }
-    pswitchProp->asicInfo[id].numPorts = 
-           bst_info.unit[id].asic_capabilities.numPorts;
   }
 
 
@@ -632,12 +581,7 @@ BVIEW_STATUS bst_send_response (BVIEW_BST_RESPONSE_MSG_t * reply_data)
           reply_data->response.config,
           &pJsonBuffer);
       break;
-    case  BVIEW_BST_CMD_API_GET_SWITCH_PROPERTIES:
-      /* call json encoder api for featute*/
-       rv = bstjson_encode_get_switch_properties (reply_data->unit, reply_data->id,
-                                                  reply_data->switchProperties,
-                                                  &pJsonBuffer);
-       break;
+
    
      case BVIEW_BST_CMD_API_GET_REPORT:
      case BVIEW_BST_CMD_API_TRIGGER_REPORT:
@@ -769,7 +713,7 @@ BVIEW_STATUS bst_copy_reply_params (BVIEW_BST_REQUEST_MSG_t * msg_data,
   reply_data->options.statsInPercentage = false;
 
   /* copy the address pointer of the default values */
-  reply_data->options.bst_defaults_ptr = &ptr->bst_defaults;
+  reply_data->options.bst_max_buffers_ptr = &ptr->bst_max_buffers;
         /* copy the collect params into options fields of the request */
   BST_COPY_COLLECT_TO_RESP (pCollect, pResp);
 
@@ -856,9 +800,7 @@ BVIEW_STATUS bst_copy_reply_params (BVIEW_BST_REQUEST_MSG_t * msg_data,
     case BVIEW_BST_CMD_API_GET_TRACK:
       reply_data->response.track = &ptr->bst_data->bst_config.track;
       break;
-    case BVIEW_BST_CMD_API_GET_SWITCH_PROPERTIES:
-      reply_data->switchProperties = bst_info.switchProperties;
-     break; 
+
     default:
       break;
   }
@@ -966,10 +908,7 @@ void bst_app_uninit ()
   {
     LOG_POST (BVIEW_LOG_ERROR, "Failed to get num of units\r\n");
   }
-  if (NULL != bst_info.switchProperties)
-  {
-     free (bst_info.switchProperties);
-  }
+
   for (id = 0; id < num_units; id++)
   {
     /* if periodic collection is enabled
@@ -1080,18 +1019,6 @@ BVIEW_STATUS bst_main ()
               "Failed to number of units, Unable to start bst application\r\n");
     return BVIEW_STATUS_RESOURCE_NOT_AVAILABLE;
   }
-  /* allocate memory for switch properties*/
-  bst_info.switchProperties = 
-          (BVIEW_SWITCH_PROPERTIES_t *) malloc (sizeof (BVIEW_SWITCH_PROPERTIES_t));
-  if (bst_info.switchProperties == NULL)
-  {
-    LOG_POST (BVIEW_LOG_EMERGENCY,
-                "Failed to allocate memory for bst application\r\n");
-    return BVIEW_STATUS_RESOURCE_NOT_AVAILABLE;
-  }
-
-  memset (bst_info.switchProperties, 0x00, 
-                    sizeof (BVIEW_SWITCH_PROPERTIES_t));
 
   /* allocate memory for all units */
   for (id = 0; id < num_units; id++)
