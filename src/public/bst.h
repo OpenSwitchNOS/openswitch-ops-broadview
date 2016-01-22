@@ -305,25 +305,6 @@ typedef struct _bst_rqe_q_threshold_
     uint64_t rqeQueueThreshold;
 } BVIEW_BST_EGRESS_RQE_QUEUE_THRESHOLD_t;
 
-/* Maximum length of ASIC ID notation*/
-#define BVIEW_ASIC_NOTATION_LEN             32
-
-typedef struct _switch_asic_info_
-{
-   char              asic_notation[BVIEW_ASIC_NOTATION_LEN];
-   BVIEW_ASIC_TYPE   asicType;
-   int               numPorts;
-   BVIEW_BST_ASIC_SNAPSHOT_DATA_t defBufferVal;
-}  BVIEW_SWITCH_ASIC_INFO_t;
-
-/* Structure to pass API parameters to the BST APP */
-typedef struct _switch_properties_
-{
-    uint8_t networkOs[BVIEW_NETWORK_OS_LEN_MAX];
-    int     numAsics;
-    int     featureMask;
-     BVIEW_SWITCH_ASIC_INFO_t   asicInfo[BVIEW_MAX_ASICS_ON_A_PLATFORM];
-} BVIEW_SWITCH_PROPERTIES_t;
 
 /* The callback for invoking when a configured trigger goes off */
 typedef BVIEW_STATUS(*BVIEW_BST_TRIGGER_CALLBACK_t) (int asic,

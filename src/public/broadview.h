@@ -39,6 +39,9 @@ extern "C"
 /** Maximum length of network os string*/
 #define BVIEW_NETWORK_OS_LEN_MAX       32
 
+/** Maximum length of feature name string*/
+#define BVIEW_MAX_FEATURE_NAME_LEN       32
+
 /** Maximum supported asics on a platform */ 
 #define BVIEW_MAX_ASICS_ON_A_PLATFORM   1
 
@@ -55,7 +58,11 @@ extern "C"
 #define BVIEW_SBPLUGIN_MAX_FEATURES    (BVIEW_MAX_FEATURES+1) 
 
 /** json version */
-#define BVIEW_JSON_VERSION   1 
+#define BVIEW_JSON_VERSION   2 
+
+
+/** agent software name */
+#define BVIEW_AGENT_SW_NAME   "broadview" 
     /** Indicates various status codes.
     *  This status codes are typically used as return values for function 
     *  calls. However, they can be used elsewhere as well to indicate

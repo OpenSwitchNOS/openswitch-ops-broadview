@@ -10,9 +10,18 @@ NOOP  ?= @:
 export OUT_SYSTEM=$(OPENAPPS_OUTPATH)/$(MODULE)
 export LIBS_SYSTEM=$(MODULE).a
 
-CFLAGS += -Wall -g -I../../public -I ../../nb_plugin/rest/ -I../../sb_plugin/include -I $(OPENAPPS_OUTPATH)
+SYSTEM_COMMON_DIR = system 
 
-OBJECTS_SYSTEM := $(patsubst %.c,%.o,$(wildcard *.c))
+CFLAGS += -Wall -g -I../../public -I ../../nb_plugin/rest/ -I../../sb_plugin/include -I ./reg_hb -I ./system_utils -I ./reg_hb/api -I ./system_utils/api -I ./ -I ../../../vendor/cjson -I $(OPENAPPS_OUTPATH)
+searchdirs = $(realpath $(OPENAPPS_BASE)/src/infrastructure/$(SYSTEM_COMMON_DIR)/system_utils)
+searchdirs += $(realpath $(OPENAPPS_BASE)/src/infrastructure/$(SYSTEM_COMMON_DIR)/reg_hb)
+searchdirs += $(realpath $(OPENAPPS_BASE)/src/infrastructure/$(SYSTEM_COMMON_DIR))
+
+export CPATH += $(searchdirs)
+
+OBJECTS_SYSTEM := $(notdir $(patsubst %.c,%.o,$(shell find . -name "*.c")))
+
+export VPATH += $(dir $(shell find . -name "*.c"))
 
 $(OUT_SYSTEM)/%.o : %.c
 	@mkdir -p $(OUT_SYSTEM) 

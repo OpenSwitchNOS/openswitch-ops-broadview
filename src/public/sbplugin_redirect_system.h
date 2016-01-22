@@ -440,6 +440,92 @@ BVIEW_STATUS  sbapi_system_feature_mask_get (int *featureMask);
 *********************************************************************/
 BVIEW_STATUS  sbapi_system_network_os_get (uint8_t *buffer, int length);
 
+/*********************************************************************
+* @brief       Get system UID 
+*
+* @param[out]  buffer                 Pointer to UID String
+*
+* @retval   BVIEW_STATUS_FAILURE      Due to lock acquistion failure 
+*                                     Failed to get network os
+*
+* @retval   BVIEW_STATUS_SUCCESS      UID is successfully
+*                                     queried
+*
+* @notes    none
+*
+*********************************************************************/
+BVIEW_STATUS  sbapi_system_uid_get (uint8_t *buffer, int length);
+
+/*********************************************************************
+* @brief  Get Current local time.
+*
+* @param[out] tm                          - Pointer to tm structure
+*
+* @retval   BVIEW_STATUS_FAILURE      Due to lock acquistion failure or 
+*                                     System feature is not present or
+*                                     System south bound function has returned failure
+*
+* @retval   BVIEW_STATUS_SUCCESS      System south bound function for time get is
+*                                     successful 
+*
+* @retval   BVIEW_STATUS_UNSUPPORTED  System time get functionality is 
+*                                     not supported on this unit
+*
+* @notes    none
+*
+*********************************************************************/
+BVIEW_STATUS sbapi_system_time_get (time_t *ptime);
+
+
+/*********************************************************************
+* @brief       Get lag number in notational representation(string) 
+*                from system lag number and asic number
+*
+* @param[in]  asic        System asic number 
+* @param[in]  lag         System lag number 
+* @param[out] dst         lag number in notational(string) form
+*
+* @retval   BVIEW_STATUS_FAILURE      Due to lock acquistion failure or 
+*                                     System feature is not present or
+*                                     System south bound function has returned failure
+*
+* @retval   BVIEW_STATUS_SUCCESS      System south bound function for name get is
+*                                     successful 
+*
+* @retval   BVIEW_STATUS_UNSUPPORTED  System name get functionality is 
+*                                     not supported on this unit
+*
+* @notes    none
+*
+*********************************************************************/
+BVIEW_STATUS sbapi_system_lag_translate_to_notation(int asic, int lag, char *dst);
+
+/*********************************************************************
+* @brief  Get snapshot of max buffers allocated 
+*
+*
+* @param[in]   asic                          unit
+* @param[out]  maxBufSnapshot                Max buffers snapshot
+* @param[out]  time                          time
+*
+* @retval   BVIEW_STATUS_FAILURE      Due to lock acquistion failure or 
+*                                     Not able to get asic type of this unit or
+*                                     system feature is not present or
+*                                     System south bound function has returned failure
+*
+* @retval   BVIEW_STATUS_SUCCESS      Snapshot get is successful 
+*
+* @retval   BVIEW_STATUS_UNSUPPORTED  Snapshot get functionality is 
+*                                     not supported on this unit
+*
+*
+* @notes    none
+*
+*
+*********************************************************************/
+BVIEW_STATUS sbapi_system_max_buf_snapshot_get (int asic,
+                                      BVIEW_SYSTEM_ASIC_MAX_BUF_SNAPSHOT_DATA_t *maxBufSnapshot,
+                                      BVIEW_TIME_t * time);
 #ifdef	__cplusplus
 }
 #endif

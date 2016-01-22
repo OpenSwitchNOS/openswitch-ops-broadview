@@ -117,102 +117,6 @@ BVIEW_STATUS bstjson_encode_get_bst_feature( int asicId,
     return BVIEW_STATUS_SUCCESS;
 }
 
-/******************************************************************
- * @brief  Creates a JSON buffer using the supplied data for the
- *         "get-switch-properties" REST API.
- *
- * @param[in]   asicId      ASIC for which this data is being encoded.
- * @param[in]   method      Method ID (from original request) that needs
- *                          to be encoded in JSON.
- * @param[in]   pData       Data structure holding the required parameters.
- * @param[out]  pJsonBuffer Filled-in JSON buffer
- *
- * @retval   BVIEW_STATUS_SUCCESS  Data is encoded into JSON successfully
- * @retval   BVIEW_STATUS_RESOURCE_NOT_AVAILABLE  Internal Error
- * @retval   BVIEW_STATUS_INVALID_PARAMETER  Invalid input parameter
- * @retval   BVIEW_STATUS_OUTOFMEMORY  No available memory to create JSON buffer
- *
- * @note     The returned json-encoded-buffer should be freed using the
- *           bstjson_memory_free(). Failing to do so leads to memory leaks
- *********************************************************************/
-BVIEW_STATUS bstjson_encode_get_switch_properties ( int asicId,
-                                            int method,
-                                            BVIEW_SWITCH_PROPERTIES_t *pData,
-                                            uint8_t **pJsonBuffer
-                                            )
-{
-    char *getSwitchPropTemplate = "{\
-\"jsonrpc\": \"2.0\",\
-\"method\": \"get-switch-properties\",\
-\"version\": \"%d\",\
-\"result\": {\"number-of-asics\": %d,\
-\"asic-info\":[%s],\
-\"supported-features\":[%s],\
-\"network-os\":\"%s\"},\
-\"id\":%d }";
-
-   char *asicInfoTemplate = "[\"%s\", \"%s\", %d],";
-   char *featureTemplate = "\"%s\"";
-   char *jsonBuf;
-   BVIEW_STATUS status;
-   char asicInfoStr[JSON_MAX_NODE_LENGTH]={0}; 
-   char featureStr[JSON_MAX_NODE_LENGTH]={0}; 
-   int asic =0;
-   int len = 0;
-   int totalLen = 0;
-
-   _JSONENCODE_LOG(_JSONENCODE_DEBUG_TRACE, "BST-JSON-Encoder : Request for Get-Switch-Properties \n");
-
-    /* Validate Input Parameters */
-   _JSONENCODE_ASSERT (pData != NULL);
-
-    /* allocate memory for JSON */
-   status = bstjson_memory_allocate(BSTJSON_MEMSIZE_RESPONSE, (uint8_t **) & jsonBuf);
-   _JSONENCODE_ASSERT (status == BVIEW_STATUS_SUCCESS);
-
-   /* clear the buffer */
-   memset(jsonBuf, 0, BSTJSON_MEMSIZE_RESPONSE);
-   
-   for (asic = 0; asic < pData->numAsics ; asic++)
-   {
-     len  = snprintf (&asicInfoStr[totalLen],JSON_MAX_NODE_LENGTH,asicInfoTemplate, 
-            pData->asicInfo[asic].asic_notation, 
-            (pData->asicInfo[asic].asicType == BVIEW_ASIC_TYPE_TD2) ? "BCM56850" : "BCM56960", 
-            pData->asicInfo[asic].numPorts);
-     totalLen += len;
-   }
-   /* Remove comma after last element */
-   asicInfoStr[totalLen -1] = '\0';
-   
-   len = 0;
-   totalLen = 0;
-   if (pData->featureMask & BVIEW_FEATURE_BST)
-   {
-     len = snprintf (&featureStr[totalLen], JSON_MAX_NODE_LENGTH,featureTemplate, "BST");
-     totalLen += len;
-   }
-   if (pData->featureMask & BVIEW_FEATURE_PACKET_TRACE)
-   {
-     len =  snprintf (&featureStr[totalLen], JSON_MAX_NODE_LENGTH, "%s", ",");
-     totalLen += len;
-     len  = snprintf (&featureStr[totalLen], JSON_MAX_NODE_LENGTH, featureTemplate, "PT");
-   } 
-   
-   /* encode the JSON */
-   snprintf(jsonBuf, BSTJSON_MEMSIZE_RESPONSE, getSwitchPropTemplate,
-            BVIEW_JSON_VERSION, pData->numAsics, asicInfoStr, featureStr, pData->networkOs,
-            method);            
-
-    /* setup the return value */
-   *pJsonBuffer = (uint8_t *) jsonBuf;
-
-   _JSONENCODE_LOG(_JSONENCODE_DEBUG_TRACE, "BST-JSON-Encoder : Encoding complete [%d bytes] \n", (int)strlen(jsonBuf));
-
-   _JSONENCODE_LOG(_JSONENCODE_DEBUG_DUMPJSON, "BST-JSON-Encoder : %s \n", jsonBuf);
-
-   return BVIEW_STATUS_SUCCESS;
-}
-
    
 /******************************************************************
  * @brief  Creates a JSON buffer using the supplied data for the 
@@ -326,7 +230,7 @@ static BVIEW_STATUS _jsonencode_report_device ( char *jsonBuf,
    */
   uint64_t data;
   *length = 0;
-  uint64_t defaultVal = 0;
+  uint64_t maxBufVal = 0;
 
   _JSONENCODE_LOG(_JSONENCODE_DEBUG_TRACE, "BST-JSON-Encoder : (Report) Encoding device data \n");
 
@@ -346,9 +250,9 @@ static BVIEW_STATUS _jsonencode_report_device ( char *jsonBuf,
   }
   /* data to be sent to collector */
   data = current->device.bufferCount;
-  defaultVal = options->bst_defaults_ptr->device.bufferCount;
+  maxBufVal = options->bst_max_buffers_ptr->device.data.maxBuf;
 
-  bst_json_convert_data(options, asic, &data, defaultVal);
+  bst_json_convert_data(options, asic, &data, maxBufVal);
 
   /* encode the JSON */
   *length = snprintf(jsonBuf, bufLen, getBstDeviceReportTemplate, data);
@@ -647,7 +551,7 @@ uint64_t round_int( double r ) {
 ********************************************************************/
 BVIEW_STATUS bst_json_convert_data(const BSTJSON_REPORT_OPTIONS_t *options,
                                           const BVIEW_ASIC_CAPABILITIES_t *asic,
-                                          uint64_t *value, uint64_t defVal)
+                                          uint64_t *value, uint64_t maxBufVal)
 {
   double percentage =0;
   uint64_t data = 0;
@@ -676,14 +580,14 @@ BVIEW_STATUS bst_json_convert_data(const BSTJSON_REPORT_OPTIONS_t *options,
     /* report is stats */
     if (true == options->statsInPercentage)
     {
-      if (0 == defVal)
+      if (0 == maxBufVal)
       {
         data = 0;
       }
       else
       {
         /* we just need the percentage of the configured value */
-        percentage = ((double)(data * 100))/((double)(defVal));
+        percentage = ((double)(data * 100))/((double)(maxBufVal));
         data = round_int(percentage);
       }
     }

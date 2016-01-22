@@ -28,7 +28,6 @@
 #include "configure_bst_thresholds.h"
 #include "configure_bst_feature.h"
 #include "configure_bst_tracking.h"
-#include "get_switch_properties.h"
 #include "get_bst_tracking.h"
 #include "get_bst_feature.h"
 #include "get_bst_thresholds.h"
@@ -55,8 +54,7 @@ static BVIEW_REST_API_t bst_cmd_api_list[] = {
   {"get-bst-tracking", bstjson_get_bst_tracking},
   {"get-bst-thresholds", bstjson_get_bst_thresholds},
   {"clear-bst-thresholds", bstjson_clear_bst_thresholds},
-  {"clear-bst-statistics", bstjson_clear_bst_statistics},
-  {"get-switch-properties", bstjson_get_switch_properties}
+  {"clear-bst-statistics", bstjson_clear_bst_statistics}
 };
 /*********************************************************************
 * @brief : application function to configure the bst features
@@ -105,7 +103,8 @@ BVIEW_STATUS bst_config_feature_set (BVIEW_BST_REQUEST_MSG_t * msg_data)
        interval in milli seconds. */ 
   tmpMask = msg_data->request.config.configMask;
 
-  if (ptr->collectionInterval != msg_data->request.config.collectionInterval)
+  if ((tmpMask & (1 << BST_CONFIG_PARAMS_COLL_INTRVL)) &&
+      (ptr->collectionInterval != msg_data->request.config.collectionInterval))
   {
     /* Collection interval has changed.
        so need to register the modified interval with the timer */
@@ -138,34 +137,37 @@ BVIEW_STATUS bst_config_feature_set (BVIEW_BST_REQUEST_MSG_t * msg_data)
     ptr->sendIncrementalReport = (msg_data->request.config.sendIncrementalReport == 0)?1:0;
   }
 
+ if (tmpMask & (1 << BST_CONFIG_PARAMS_SND_ASYNC_REP))
+ { 
+   if (true == msg_data->request.config.sendAsyncReports)
+   {
+     /* request contains sendAsyncReports = true */
+     if (true != ptr->sendAsyncReports)
+     {
+       /* old config is not enabled for sending async reports.
+          now it is enabled.. so need to register with timer*/
+       ptr->sendAsyncReports = true;
+       timerUpdateReqd = true;
+     }
+     /*
+        Register with the timer for periodic callbacks */
+     if (true == timerUpdateReqd)
+     {
+       bst_periodic_collection_timer_add (msg_data->unit);
+     }
+   }
+   else
+   {
+     ptr->sendAsyncReports = false;
+     /* Periodic report collection is turned off...
+        so no need for  the timer. 
+        delete the timer */
+     bst_periodic_collection_timer_delete (msg_data->unit);
+   }
+ }
 
-  if (true == msg_data->request.config.sendAsyncReports)
-  {
-    /* request contains sendAsyncReports = true */
-    if (true != ptr->sendAsyncReports)
-    {
-      /* old config is not enabled for sending async reports.
-        now it is enabled.. so need to register with timer*/
-      ptr->sendAsyncReports = true;
-      timerUpdateReqd = true;
-    }
-    /*
-       Register with the timer for periodic callbacks */
-    if (true == timerUpdateReqd)
-    {
-      bst_periodic_collection_timer_add (msg_data->unit);
-    }
-  }
-  else
-  {
-    ptr->sendAsyncReports = false;
-    /* Periodic report collection is turned off...
-       so no need for  the timer. 
-       delete the timer */
-    bst_periodic_collection_timer_delete (msg_data->unit);
-  }
-
-  if (ptr->statUnitsInCells != msg_data->request.config.statUnitsInCells)
+  if ((tmpMask & (1 << BST_CONFIG_PARAMS_STATS_UNITS)) && 
+      (ptr->statUnitsInCells != msg_data->request.config.statUnitsInCells))
   {
     /* Store the data is desired in bytes or cells */
     ptr->statUnitsInCells = msg_data->request.config.statUnitsInCells;
@@ -181,6 +183,14 @@ BVIEW_STATUS bst_config_feature_set (BVIEW_BST_REQUEST_MSG_t * msg_data)
 
 
   BST_RWLOCK_UNLOCK(msg_data->unit);
+
+  if (!(tmpMask & (1 << BST_CONFIG_PARAMS_ENABLE)))
+  {
+    /* bst not enabled in config.
+       just return */
+      return rv;
+  }
+
   /* till now we have not checked if the same is enabled in h/w.
       Now check if the bst is enabled in asic.. 
      want to check from s/w .. but set can happen directly and get 
@@ -465,6 +475,7 @@ BVIEW_STATUS bst_get_report (BVIEW_BST_REQUEST_MSG_t * msg_data)
   BVIEW_BST_UNIT_CXT_t *ptr;
   BVIEW_BST_TRACK_PARAMS_t *track_ptr;
   BVIEW_BST_CONFIG_PARAMS_t *config_ptr;
+  BVIEW_TIME_t  curr_time;   
  
   if (NULL == msg_data)
   {
@@ -514,6 +525,14 @@ BVIEW_STATUS bst_get_report (BVIEW_BST_REQUEST_MSG_t * msg_data)
       /* Since stats collection has failed.. no need to do the rest.
          report the error to the calling function */
     }
+
+	/* check if stats are requested in percentage format.
+	    if yes, then retrieve the default/max buffers allocated from ASIC */
+    if (true == config_ptr->statsInPercentage)
+	{
+       sbapi_system_max_buf_snapshot_get (msg_data->unit, &ptr->bst_max_buffers,
+                                          &curr_time);
+	}
 
     if (BVIEW_BST_CMD_API_TRIGGER_REPORT == msg_data->msg_type)
     {
@@ -960,6 +979,7 @@ BVIEW_STATUS bst_module_register ()
   memset (&bstInfo, 0, sizeof (BVIEW_MODULE_FETAURE_INFO_t));
 
   bstInfo.featureId = BVIEW_FEATURE_BST;
+  strncpy (&bstInfo.featureName[0], "bst", strlen("bst"));
   memcpy (bstInfo.restApiList, bst_cmd_api_list,
           sizeof(bst_cmd_api_list));
 

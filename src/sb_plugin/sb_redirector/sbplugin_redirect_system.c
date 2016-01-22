@@ -1273,3 +1273,231 @@ BVIEW_STATUS  sbapi_system_network_os_get (uint8_t *buffer, int length)
   return rv;
 }
 
+/*********************************************************************
+* @brief       Get system UID
+*
+* @param[out]  buffer        UID 
+* @param[in]   length        Buffer length
+*
+* @retval   BVIEW_STATUS_FAILURE      Due to lock acquistion failure or 
+*                                     System feature is not present or
+*                                     System south bound function has returned failure
+*
+* @retval   BVIEW_STATUS_SUCCESS      System south bound function for UID get is
+*                                     successful 
+*
+* @retval   BVIEW_STATUS_UNSUPPORTED  System  UID get functionality is 
+*                                     not supported on this unit
+*
+*
+* @notes    none
+*
+*********************************************************************/
+BVIEW_STATUS sbapi_system_uid_get (uint8_t * buffer, int length)
+{
+  BVIEW_SB_SYSTEM_FEATURE_t *systemFeaturePtr = NULL;
+  BVIEW_STATUS rv = BVIEW_STATUS_SUCCESS;
+  BVIEW_ASIC_TYPE asicType = BVIEW_ASIC_TYPE_ALL;
+
+  /* Acquire Read lock */
+  SB_REDIRECT_RWLOCK_RD_LOCK (sbRedirectRWLock);
+  /* Get system south bound plug-in */
+  systemFeaturePtr =
+    (BVIEW_SB_SYSTEM_FEATURE_t *) sb_redirect_feature_handle_get (asicType,
+                                                                  BVIEW_FEATURE_SYSTEM);
+  /* Validate system feature pointer and south bound handler.
+   * Call south bound handler                               */
+  if (systemFeaturePtr == NULL)
+  {
+    rv = BVIEW_STATUS_FAILURE;
+  }                              
+  else if ((systemFeaturePtr->system_uid_get_cb) == NULL)
+  {
+    rv = BVIEW_STATUS_UNSUPPORTED;
+  }
+  else
+  {                              
+    rv = systemFeaturePtr->system_uid_get_cb (buffer, length);
+  }
+  /* Release Read lock */
+  SB_REDIRECT_RWLOCK_UNLOCK (sbRedirectRWLock);
+  return rv;
+}
+
+/*********************************************************************
+* @brief  Get Current local time.
+*
+* @param[out] tm                          - Pointer to tm structure
+*
+* @retval   BVIEW_STATUS_FAILURE      Due to lock acquistion failure or 
+*                                     System feature is not present or
+*                                     System south bound function has returned failure
+*
+* @retval   BVIEW_STATUS_SUCCESS      System south bound function for time get is
+*                                     successful 
+*
+* @retval   BVIEW_STATUS_UNSUPPORTED  System time get functionality is 
+*                                     not supported on this unit
+*
+* @notes    none
+*
+*********************************************************************/
+BVIEW_STATUS sbapi_system_time_get (time_t *pTime)
+{
+  BVIEW_SB_SYSTEM_FEATURE_t *systemFeaturePtr = NULL;
+  BVIEW_STATUS rv = BVIEW_STATUS_SUCCESS;
+  BVIEW_ASIC_TYPE asicType = BVIEW_ASIC_TYPE_ALL;
+
+  /* Acquire Read lock */
+  SB_REDIRECT_RWLOCK_RD_LOCK (sbRedirectRWLock);
+  /* Get system south bound plug-in */
+  systemFeaturePtr =
+    (BVIEW_SB_SYSTEM_FEATURE_t *) sb_redirect_feature_handle_get (asicType,
+                                                                  BVIEW_FEATURE_SYSTEM);
+  /* Validate system feature pointer and south bound handler.
+   * Call south bound handler                               */
+  if (systemFeaturePtr == NULL)
+  {
+    rv = BVIEW_STATUS_FAILURE;
+  }                              
+  else if ((systemFeaturePtr->system_time_get_cb) == NULL)
+  {
+    rv = BVIEW_STATUS_UNSUPPORTED;
+  }
+  else
+  {                              
+    rv = systemFeaturePtr->system_time_get_cb (pTime);
+  }
+  /* Release read-lock */
+  SB_REDIRECT_RWLOCK_UNLOCK (sbRedirectRWLock);
+  return rv;
+}
+
+
+
+/*********************************************************************
+* @brief       Get lag number in notational representation(string) 
+*                from system lag number and asic number
+*
+* @param[in]  asic        System asic number 
+* @param[in]  lag         System lag number 
+* @param[out] dst         lag number in notational(string) form
+*
+* @retval   BVIEW_STATUS_FAILURE      Due to lock acquistion failure or 
+*                                     System feature is not present or
+*                                     System south bound function has returned failure
+*
+* @retval   BVIEW_STATUS_SUCCESS      System south bound function for name get is
+*                                     successful 
+*
+* @retval   BVIEW_STATUS_UNSUPPORTED  System name get functionality is 
+*                                     not supported on this unit
+*
+* @notes    none
+*
+*********************************************************************/
+BVIEW_STATUS sbapi_system_lag_translate_to_notation(int asic, int lag, char *dst)
+{
+  BVIEW_SB_SYSTEM_FEATURE_t *systemFeaturePtr = NULL;
+  BVIEW_STATUS rv = BVIEW_STATUS_SUCCESS;
+  BVIEW_ASIC_TYPE asicType = BVIEW_ASIC_TYPE_ALL;
+
+  /* Acquire Read lock */
+  SB_REDIRECT_RWLOCK_RD_LOCK (sbRedirectRWLock);
+  /* Get system south bound plug-in */
+  systemFeaturePtr =
+    (BVIEW_SB_SYSTEM_FEATURE_t *) sb_redirect_feature_handle_get (asicType,
+                                                                  BVIEW_FEATURE_SYSTEM);
+  /* Validate system feature pointer and south bound handler.
+   * Call south bound handler                               */
+  if (systemFeaturePtr == NULL)
+  {
+    rv = BVIEW_STATUS_FAILURE;
+  }                              
+  else if ((systemFeaturePtr->system_lag_translate_to_notation_cb) == NULL)
+  {
+    SB_REDIRECT_DEBUG_PRINT (BVIEW_LOG_ERROR,
+                           "(%s:%d) System feature does not support"
+                           "system_lag_translate_to_notation call back\n",
+                           __FILE__, __LINE__);
+    rv = BVIEW_STATUS_UNSUPPORTED;
+  }
+  else
+  {                              
+    dst[0] = 0;
+    rv = systemFeaturePtr->system_lag_translate_to_notation_cb(asic, lag, dst);
+    SB_REDIRECT_DEBUG_PRINT (BVIEW_LOG_DEBUG,
+                    "(%s:%d) After calling "
+                    "system_lag_translate_to_notation call back"
+                    " asic = %d, lag = %d, dst = %s, rv = %d\n",
+                     __FILE__, __LINE__,asic, lag, dst, rv);
+  }
+  /* Release read-lock */
+  SB_REDIRECT_RWLOCK_UNLOCK (sbRedirectRWLock);
+  return rv;
+}
+
+/*********************************************************************
+* @brief  Get snapshot of max buffers allocated 
+*
+*
+* @param[in]   asic                          unit
+* @param[out]  maxBufSnapshot                Max buffers snapshot
+* @param[out]  time                          time
+*
+* @retval   BVIEW_STATUS_FAILURE      Due to lock acquistion failure or 
+*                                     Not able to get asic type of this unit or
+*                                     system feature is not present or
+*                                     System south bound function has returned failure
+*
+* @retval   BVIEW_STATUS_SUCCESS      Snapshot get is successful 
+*
+* @retval   BVIEW_STATUS_UNSUPPORTED  Snapshot get functionality is 
+*                                     not supported on this unit
+*
+*
+* @notes    none
+*
+*
+*********************************************************************/
+BVIEW_STATUS sbapi_system_max_buf_snapshot_get (int asic,
+                                      BVIEW_SYSTEM_ASIC_MAX_BUF_SNAPSHOT_DATA_t *maxBufSnapshot,
+                                      BVIEW_TIME_t * time)
+{
+  BVIEW_SB_SYSTEM_FEATURE_t *systemFeaturePtr = NULL;
+  BVIEW_STATUS rv = BVIEW_STATUS_SUCCESS;
+  BVIEW_ASIC_TYPE asicType;
+
+  /* Get asic type of the unit */
+  if (sbapi_system_unit_to_asic_type_get (asic, &asicType) !=
+      BVIEW_STATUS_SUCCESS)
+  {
+    SB_REDIRECT_DEBUG_PRINT (BVIEW_LOG_ERROR,
+                             "(%s:%d) Failed to get asic type for unit %d \n",
+                             __FILE__, __LINE__, asic);
+    return BVIEW_STATUS_FAILURE;
+  }
+  /* Acquire Read lock */
+  SB_REDIRECT_RWLOCK_RD_LOCK (sbRedirectRWLock);
+  /* Get best matching south bound feature functions based on Asic type */
+  systemFeaturePtr =
+    (BVIEW_SB_SYSTEM_FEATURE_t *) sb_redirect_feature_handle_get (asicType,
+                                                               BVIEW_FEATURE_SYSTEM);
+  /* Validate feature pointer and south bound handler. 
+   * Call south bound handler                        */    
+  if (systemFeaturePtr == NULL)
+  {
+    rv = BVIEW_STATUS_FAILURE;
+  }                
+  else if (systemFeaturePtr->system_max_buf_snapshot_get_cb == NULL)
+  {
+    rv = BVIEW_STATUS_UNSUPPORTED;
+  }
+  else
+  {                              
+    rv = systemFeaturePtr->system_max_buf_snapshot_get_cb (asic, maxBufSnapshot, time);
+  }
+  /* Release read lock */
+  SB_REDIRECT_RWLOCK_UNLOCK (sbRedirectRWLock);
+  return rv;
+}

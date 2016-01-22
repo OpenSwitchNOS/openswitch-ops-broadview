@@ -40,19 +40,6 @@ extern "C"
 
 #define REST_MAX_IP_ADDR_LENGTH    20
 
-/* file from where the configuration properties are read. */
-#define REST_CONFIG_FILE    "/etc/broadview_config.cfg"
-
-#define REST_CONFIG_PROPERTY_CLIENT_IP   "bview_client_ip"
-#define REST_CONFIG_PROPERTY_CLIENT_IP_DEFAULT   "127.0.0.1"    
-
-#define REST_CONFIG_PROPERTY_CLIENT_PORT   "bview_client_port"
-#define REST_CONFIG_PROPERTY_CLIENT_PORT_DEFAULT   9070
-
-#define REST_CONFIG_PROPERTY_LOCAL_PORT "agent_port"
-#define REST_CONFIG_PROPERTY_LOCAL_PORT_DEFAULT 8080
-
-
 /* Macro to acquire lock */
 #define REST_LOCK_TAKE(_ptr)                                                        \
         {                                                                           \
