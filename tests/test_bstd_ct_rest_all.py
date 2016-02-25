@@ -59,7 +59,10 @@ import configure_bst_feature_api_ct
 import configure_bst_tracking_api_ct
 import configure_bst_thresholds_api_ct
 
-config_dict = get_ini_details("serverDetails.ini","server_details")
+#cwdir = os.path.abspath(os.path.dirname(__file__))
+cwdir, f = os.path.split(__file__)
+
+config_dict = get_ini_details(cwdir + "/serverDetails.ini","server_details")
 sw_type = config_dict.get('switch_type',"").strip()
 if sw_type in ['',"genericx86-64"]:
     from opsvsi.docker import *
@@ -76,7 +79,7 @@ class bstTest( OpsVsiTest ):
         # either pass getNodeOpts() into hopts/sopts of the topology that
         # you build or into addHost/addSwitch calls
 
-        config_dict = get_ini_details("serverDetails.ini","server_details")
+        config_dict = get_ini_details(cwdir + "/serverDetails.ini","server_details")
         sw_type = config_dict.get('switch_type',"").strip()
         if sw_type in ['',"genericx86-64"]:
             topo=SingleSwitchTopo(
@@ -129,16 +132,52 @@ class bstTest( OpsVsiTest ):
     def start_agent(self):
         sw_type = self.config_dict.get('switch_type',"").strip()
         if sw_type in ['',"genericx86-64"]:
-            self.s1.cmd("/usr/bin/bufmond")
-            time.sleep(3)
-            out = self.s1.cmd("/usr/bin/ops-broadview &")
+            info("***** Starting bufmond","\n")
+            startBufMond = self.s1.cmd("/bin/systemctl start bufmond")
+            startBufMond += self.s1.cmd("echo")
+            info("***** bufmond start response :",startBufMond,"\n")
+
+            repeatCount = 24
+            foundFlag = 0
+            loopFlag = True
+            while loopFlag:
+                info("***** Bufmond Status","\n")
+                statusBufMond = self.s1.cmd("/bin/systemctl status bufmond")
+                info("***** bufmond status :",statusBufMond,"\n")
+
+                for line in statusBufMond.split("\n"):
+                    statusObj = re.match( r'Active:(.*)', line.strip(), re.M|re.I)
+                    if statusObj:
+                        activeObj = re.match( r'inactive\s*\(dead\)',statusObj.group(1).strip(), re.M|re.I)
+                        if activeObj:
+                            foundFlag = 1
+                            loopFlag = False
+                            break
+                if loopFlag:
+                    repeatCount -= 1
+                if repeatCount <= 0:
+                    loopFlag = False
+                time.sleep(5)
+
+            if foundFlag == 0:
+                info("***** bufmond status is not correct...","\n")
+                exit
+
+            info("***** Starting ops-broadview","\n")
+            self.s1.popen("/usr/bin/ops-broadview")
             time.sleep(60)
+            startBroadView = self.s1.cmd("echo")
+            info("***** ops-bradview status :",startBroadView,"\n")
+
             out = self.s1.cmd("pgrep ops-broadview")
-            out = out.split("\n")
+            info("out : ",out,"\n")
+            out = out.strip().split("\n")
+            info("out : ",out,"\n")
             if len(out) == 1:
                 self.broadview_pid = out[0]
             else:
                 self.broadview_pid = None
+            info("ops-brodview pid : ",self.broadview_pid,"\n")
 
     def stop_agent(self):
         sw_type = self.config_dict.get('switch_type',"").strip()
@@ -156,6 +195,9 @@ class bstTest( OpsVsiTest ):
         else:
             self.ip_address = self.config_dict.get('agent_server_ip',"127.0.0.1")
             self.port = self.config_dict.get('agent_server_port',"8080")
+        info("sw_type : ",sw_type,"\n")
+        info("ip_address : ",self.ip_address,"\n")
+        info("port : ",self.port,"\n")
 
     def getConfigDetails(self,filename,section):
         self.config_dict = get_ini_details(filename,section)
@@ -177,7 +219,7 @@ class Test_bstd:
             Test_bstd.test = bstTest(switchmounts=switchmounts)
         else:
             Test_bstd.test = bstTest()
-        Test_bstd.test.getConfigDetails("serverDetails.ini","server_details")
+        Test_bstd.test.getConfigDetails(pw + "/serverDetails.ini","server_details")
         Test_bstd.test.getSwitchIp()
         Test_bstd.test.start_agent()
 

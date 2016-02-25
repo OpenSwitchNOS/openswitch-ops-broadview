@@ -84,14 +84,16 @@ class get_bst_thresholds_api_ct(object):
 
     step11=step1
 
-    step12=step1
+    #step12=step1
+    #Note: broadcom is tracking this issue.
 
     def getSteps(self):
         return sorted([ i for i in dir(self) if i.startswith('step') ], key=lambda item: int(item.replace('step','')))
 
 def main(ip_address,port):
     jsonText = ConfigParser.ConfigParser()
-    jsonText.read('testCaseJsonStrings.ini')
+    cwdir, f = os.path.split(__file__)
+    jsonText.read(cwdir + '/testCaseJsonStrings.ini')
     json_dict = dict(jsonText.items('get_bst_thresholds_api_ct'))
     params=json_dict.get("paramslist","")
 
