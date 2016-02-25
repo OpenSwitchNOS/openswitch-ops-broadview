@@ -129,16 +129,25 @@ class bstTest( OpsVsiTest ):
     def start_agent(self):
         sw_type = self.config_dict.get('switch_type',"").strip()
         if sw_type in ['',"genericx86-64"]:
-            self.s1.cmd("/usr/bin/bufmond")
-            time.sleep(3)
-            out = self.s1.cmd("/usr/bin/ops-broadview &")
+            res1 = self.s1.cmd("/usr/bin/bufmond &")
+            print "***** Started bufmond "
             time.sleep(60)
+            res2 = self.s1.cmd("")
+            print "res2 : ",res2
+            res3 = self.s1.cmd("/usr/bin/ops-broadview &")
+            print "***** Started ops-broadview "
+            time.sleep(60)
+            res4 = self.s1.cmd("")
+            print "res4 : ",res4
             out = self.s1.cmd("pgrep ops-broadview")
-            out = out.split("\n")
+            print "out : ",out
+            out = out.strip().split("\n")
+            print "out : ",out
             if len(out) == 1:
                 self.broadview_pid = out[0]
             else:
                 self.broadview_pid = None
+            print "ops-brodview pid : ",self.broadview_pid
 
     def stop_agent(self):
         sw_type = self.config_dict.get('switch_type',"").strip()
@@ -156,6 +165,9 @@ class bstTest( OpsVsiTest ):
         else:
             self.ip_address = self.config_dict.get('agent_server_ip',"127.0.0.1")
             self.port = self.config_dict.get('agent_server_port',"8080")
+        print "sw_type : ",sw_type
+        print "ip_address : ",self.ip_address
+        print "port : ",self.port
 
     def getConfigDetails(self,filename,section):
         self.config_dict = get_ini_details(filename,section)

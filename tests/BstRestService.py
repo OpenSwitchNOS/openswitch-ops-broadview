@@ -115,7 +115,7 @@ class BstRestService(object):
         '''
         
         broadViewMethod = json.loads(data)[u'method']
-        methodUrl = self.url+broadViewMethod+'/'
+        methodUrl = self.url+broadViewMethod
 
         if self.verbose:
             print 'Req URL: ', methodUrl
@@ -142,7 +142,7 @@ class BstRestService(object):
         '''
         
         broadViewMethod = json.loads(data)[u'method']
-        methodUrl = self.url+broadViewMethod+'/'
+        methodUrl = self.url+broadViewMethod
 
         if self.verbose:
             print 'Req URL: ', methodUrl
@@ -169,7 +169,7 @@ class BstRestService(object):
         '''
         
         broadViewMethod = json.loads(data)[u'method']
-        methodUrl = self.url+broadViewMethod+'/'
+        methodUrl = self.url+broadViewMethod
 
         if self.verbose:
             print 'Req URL: ', methodUrl
