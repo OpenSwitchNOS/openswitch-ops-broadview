@@ -56,7 +56,7 @@ def genericREST(method,url,data,debug=True):
     If debug=True, then the url and data will be printed to the system screen.
     '''
 
-    headers = {"Content-type": "application/json", "Accept": "text/plain"}
+    headers = {"Content-type": "application/json", "Accept": "application/json"}
 
     if debug == True:
         debugLabel = "_"+method+"-REST: "
