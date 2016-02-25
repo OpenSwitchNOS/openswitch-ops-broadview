@@ -59,7 +59,8 @@ class clear_bst_thresholds_api_ct(object):
 
 def main(ip_address,port):
     jsonText = ConfigParser.ConfigParser()
-    jsonText.read('testCaseJsonStrings.ini')
+    cwdir, f = os.path.split(__file__)
+    jsonText.read(cwdir + '/testCaseJsonStrings.ini')
     json_dict = dict(jsonText.items('clear_bst_thresholds_api_ct'))
     params=json_dict.get("params","")
 
