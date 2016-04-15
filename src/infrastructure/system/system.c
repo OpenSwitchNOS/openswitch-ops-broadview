@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <errno.h>
+#include <semaphore.h>
 #include "rest_api.h"
 #include "broadview.h"
 #include "openapps_log_api.h"
@@ -60,7 +61,7 @@ pthread_mutex_t system_agent_mutex;
  *
  * @note     
  *********************************************************************/
-
+#if 0
 static BVIEW_STATUS system_agent_config_read(BVIEW_SYSTEM_AGENT_CONFIG_t *config)
 {
     FILE *configFile;
@@ -163,6 +164,7 @@ static BVIEW_STATUS system_agent_config_read(BVIEW_SYSTEM_AGENT_CONFIG_t *config
 
     return BVIEW_STATUS_SUCCESS;
 }
+#endif
 /******************************************************************
  * @brief  Sets the configuration, to defaults.
  *
@@ -205,23 +207,17 @@ static BVIEW_STATUS system_agent_config_set_defaults(BVIEW_SYSTEM_AGENT_CONFIG_t
  *********************************************************************/
 BVIEW_STATUS system_agent_config_init(BVIEW_SYSTEM_AGENT_CONFIG_t *config)
 {
-    BVIEW_STATUS status;
 
   /* take lock */ 
   SYSTEM_AGENT_LOCK_TAKE(system_agent_mutex);
-
-    status = system_agent_config_read(config);
-    if (status != BVIEW_STATUS_SUCCESS)
-    {
-        system_agent_config_set_defaults(config);
-    }
+  system_agent_config_set_defaults(config);
 
   /* give lock */ 
   SYSTEM_AGENT_LOCK_GIVE(system_agent_mutex);
 
-    LOG_POST(BVIEW_LOG_DEBUG, "SYSTEM : Configuration Complete");
+  LOG_POST(BVIEW_LOG_DEBUG, "SYSTEM : Configuration Complete");
 
-    return BVIEW_STATUS_SUCCESS;
+  return BVIEW_STATUS_SUCCESS;
 }
 /*********************************************************************
 * @brief        Function used to initialize various system components
@@ -237,7 +233,9 @@ BVIEW_STATUS system_agent_config_init(BVIEW_SYSTEM_AGENT_CONFIG_t *config)
 *********************************************************************/
 void bview_system_init_ph2(void *param)
 {
+  BVIEW_MAIN_THREAD_PARAMS_t *bview_params_ptr;
 
+  bview_params_ptr = (BVIEW_MAIN_THREAD_PARAMS_t *) param;
   /* create the mutex for agent_config data */
   pthread_mutex_init (&system_agent_mutex, NULL);
 
@@ -281,6 +279,11 @@ void bview_system_init_ph2(void *param)
   {
     LOG_POST (BVIEW_LOG_CRITICAL, "Failed to initialize system_utils application\r\n");
   } 
+
+  if (sem_post(bview_params_ptr->bview_init_sem) != 0)
+  {
+    LOG_POST (BVIEW_LOG_CRITICAL, "Failed to release bview_init_sem \r\n");
+  }
   /*Initialize REST*/ 
   if (rest_init() != BVIEW_STATUS_SUCCESS)
   {
@@ -293,7 +296,8 @@ void bview_system_init_ph2(void *param)
 * @brief        Function used to initialize various system components
 *               such as openapps driver and calls phase-2 init
 *
-* @param[in]    debug     debug mode of openapps driver
+* @param[in]    bview_params_ptr  parameters from Main thread 
+*               debug     debug mode of openapps driver
 *
 * @retval       NA
 *
@@ -301,13 +305,14 @@ void bview_system_init_ph2(void *param)
 *
 * @end
 *********************************************************************/
-void bview_system_init_ph1(bool vendor_debug , bool menu)
+void bview_system_init_ph1(BVIEW_MAIN_THREAD_PARAMS_t *bview_params_ptr, 
+                           bool vendor_debug , bool menu)
 {
   /* Initialize platform */
   VENDOR_PLATFORM_INIT(vendor_debug, menu);
   if (false == vendor_debug)
   {
-  bview_system_init_ph2(NULL); 
+  bview_system_init_ph2((void *)bview_params_ptr); 
   }
 }
 /*********************************************************************
@@ -363,7 +368,54 @@ BVIEW_STATUS system_agent_port_get(int *localPort)
 {
   /* take the lock */
   SYSTEM_AGENT_LOCK_TAKE(system_agent_mutex);
- *localPort = system_agent_cfg.localPort;
+  *localPort = system_agent_cfg.localPort;
+  /* give lock */
+  SYSTEM_AGENT_LOCK_GIVE(system_agent_mutex);
+   return BVIEW_STATUS_SUCCESS; 
+}
+/*********************************************************************
+* @brief      Function used to set the client ip address, client port
+*
+*
+* @param[in]   clientIp pointer to the  client ip address
+* @param[in]   client port
+*
+* @retval     BVIEW_STATUS_SUCCESS
+* @retval     BVIEW_STATUS_FAILURE
+*
+* @note          NA
+*
+* @end
+*********************************************************************/
+BVIEW_STATUS system_agent_client_info_set(char *clientIp, int clientPort)
+{
+  /* take the lock */
+  SYSTEM_AGENT_LOCK_TAKE(system_agent_mutex);
+  strncpy(&system_agent_cfg.clientIp[0], clientIp, BVIEW_MAX_IP_ADDR_LENGTH - 1);
+  system_agent_cfg.clientPort = clientPort; 
+  /* give lock */
+  SYSTEM_AGENT_LOCK_GIVE(system_agent_mutex);
+   return BVIEW_STATUS_SUCCESS;
+}
+
+/*********************************************************************
+* @brief      Function used to set the agent port
+*
+*
+* @param[in]   agent port
+*
+* @retval     BVIEW_STATUS_SUCCESS
+* @retval     BVIEW_STATUS_FAILURE
+*
+* @note          NA
+*
+* @end
+*********************************************************************/
+BVIEW_STATUS system_agent_port_set(int localPort)
+{
+  /* take the lock */
+  SYSTEM_AGENT_LOCK_TAKE(system_agent_mutex);
+  system_agent_cfg.localPort = localPort;
   /* give lock */
   SYSTEM_AGENT_LOCK_GIVE(system_agent_mutex);
    return BVIEW_STATUS_SUCCESS; 

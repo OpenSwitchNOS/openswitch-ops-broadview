@@ -270,6 +270,7 @@ BVIEW_STATUS system_utils_app_main (void)
       {
         continue;
       }
+      system_agent_port_get (&pswitchProp->agent_port);
       rv = handler(&msg_data);
 
       reply_data.rv = rv;
