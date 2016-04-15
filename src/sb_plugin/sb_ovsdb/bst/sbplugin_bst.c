@@ -212,7 +212,6 @@ BVIEW_STATUS sbplugin_ovsdb_bst_infra_init()
   
   return rv;
 }
-
 /*********************************************************************
 * @brief  BST feature configuration set function
 *
@@ -254,7 +253,15 @@ BVIEW_STATUS sbplugin_ovsdb_bst_config_set (int asic, BVIEW_BST_CONFIG_t *data)
   config.bst_tracking_mode    = (int) data->mode; 
   /* Periodic collection should be enabled whenever bst is enabled.
      This flag is used to collect BST stats periodically and update OVSDB by bufmon_stats thread */ 
-  config.periodic_collection  = config.bst_enable;
+  config.periodic_collection  = data->enablePeriodicCollection;
+  config.collection_interval  = data->collectionPeriod;
+  config.bstMaxTriggers  = data->bstMaxTriggers;
+  config.sendSnapshotOnTrigger  = data->sendSnapshotOnTrigger;
+  config.trackingMask = data->trackMask;
+  config.trackInit = data->trackInit;
+
+  /* Prepare of MASK of ream's enabled for tracking*/ 
+/*  sbplugin_ovsdb_realm_mask (data, &config); */
 
   rv = bst_ovsdb_bst_config_set(asic, &config);
   if (BVIEW_STATUS_SUCCESS != rv)
@@ -263,6 +270,15 @@ BVIEW_STATUS sbplugin_ovsdb_bst_config_set (int asic, BVIEW_BST_CONFIG_t *data)
                 "BST:ASIC(%d) Failed to set bst mode",asic);
     return BVIEW_STATUS_FAILURE;
   }
+
+  rv = bst_ovsdb_cache_bst_config_set(asic, &config);
+  if (BVIEW_STATUS_SUCCESS != rv)
+  {
+    SB_OVSDB_DEBUG_PRINT (
+                "BST:ASIC(%d) Failed to set bst mode in cache",asic);
+    return BVIEW_STATUS_FAILURE;
+  }
+
   return BVIEW_STATUS_SUCCESS;
 }
 
@@ -306,15 +322,16 @@ BVIEW_STATUS sbplugin_ovsdb_bst_config_get (int asic,
                 "BST:ASIC(%d) Failed to get BST configuration",asic);
     return BVIEW_STATUS_FAILURE;
   }
-
   data->enableStatsMonitoring = config.bst_enable;
   data->mode = config.bst_tracking_mode;
   data->enablePeriodicCollection = config.periodic_collection;
   data->collectionPeriod =  config.collection_interval;
+  data->bstMaxTriggers =  config.bstMaxTriggers;
+  data->sendSnapshotOnTrigger =  config.sendSnapshotOnTrigger;
+  data->trackMask =  config.trackingMask;
 
  return  BVIEW_STATUS_SUCCESS;
 }
-
 /*********************************************************************
 * @brief  Obtain Complete ASIC Statistics Report
 *
@@ -1508,7 +1525,10 @@ BVIEW_STATUS sbplugin_ovsdb_bst_rqeq_threshold_set (int asic,
 *********************************************************************/
 BVIEW_STATUS  sbplugin_ovsdb_bst_clear_stats(int asic)
 {
-  return BVIEW_STATUS_SUCCESS; 
+  /*validate ASIC*/
+  SB_OVSDB_VALID_UNIT_CHECK (asic);
+
+  return  bst_ovsdb_clear_stats(asic); 
 }
 
 /*********************************************************************
@@ -1526,7 +1546,10 @@ BVIEW_STATUS  sbplugin_ovsdb_bst_clear_stats(int asic)
 *********************************************************************/
 BVIEW_STATUS  sbplugin_ovsdb_bst_clear_thresholds  (int asic)
 {
-  return BVIEW_STATUS_SUCCESS;
+  /*validate ASIC*/
+  SB_OVSDB_VALID_UNIT_CHECK (asic);
+
+  return bst_ovsdb_clear_thresholds(asic);
 }
 
 /*********************************************************************
@@ -1549,6 +1572,16 @@ BVIEW_STATUS  sbplugin_ovsdb_bst_register_trigger (int asic,
                                         BVIEW_BST_TRIGGER_CALLBACK_t callback, 
                                         void *cookie)
 {
+  BVIEW_STATUS rv = BVIEW_STATUS_SUCCESS;
+
+  rv = bst_ovsdb_bst_register_trigger (asic, callback, cookie);
+  if (SB_OVSDB_RV_ERROR (rv))
+  {
+    SB_OVSDB_DEBUG_PRINT (
+                "BST:ASIC(%d) Failed to Register trigger callback", asic);
+    return BVIEW_STATUS_FAILURE;
+  }
+  
   return BVIEW_STATUS_SUCCESS;
 }
 
@@ -1657,30 +1690,31 @@ BVIEW_STATUS sbplugin_ovsdb_bst_threshold_get (int asic,
       }
     }
   }
- 
-  /* Get threshold configuration for The BST_Threshold for the Egress MC Queues in units of buffers.*/
-  BVIEW_BST_MC_QUEUE_ITER (asic,index)
-  {
-    rv = bst_ovsdb_threshold_get (asic, port, index,
+
+    /* Get threshold configuration for The BST_Threshold for the Egress MC Queues in units of buffers.*/
+    BVIEW_BST_MC_QUEUE_ITER (asic,index)
+    {
+      rv = bst_ovsdb_threshold_get (asic, port, index,
                                     SB_OVSDB_BST_STAT_ID_MCAST,
                                     &data->eMcQ.data[index].mcBufferCount);
-    if (SB_OVSDB_RV_ERROR (rv))
-    {
+      if (SB_OVSDB_RV_ERROR (rv))
+      {
         return BVIEW_STATUS_FAILURE;
+      }
+
+      data->eMcQ.data[index].port = 0;
     }
-    data->eMcQ.data[index].port = 0;
-  }
     /* Get threshold configuration for The BST_Threshold for the Egress UC Queues in units of 8 buffers.*/
-  BVIEW_BST_UC_QUEUE_ITER (asic,index)
-  {
-    rv = bst_ovsdb_threshold_get (asic, port, index,
-          SB_OVSDB_BST_STAT_ID_UCAST, &data->eUcQ.data[index].ucBufferCount);
-    if (BVIEW_STATUS_SUCCESS != rv)
+    BVIEW_BST_UC_QUEUE_ITER (asic,index)
     {
+      rv = bst_ovsdb_threshold_get (asic, port, index,
+          SB_OVSDB_BST_STAT_ID_UCAST, &data->eUcQ.data[index].ucBufferCount);
+      if (BVIEW_STATUS_SUCCESS != rv)
+      {
         return BVIEW_STATUS_FAILURE;
+      }
+      data->eUcQ.data[index].port =  0;
     }
-    data->eUcQ.data[index].port = 0;
-  }
  
   BVIEW_BST_SP_ITER (asic, index)
   {
@@ -1751,35 +1785,6 @@ BVIEW_STATUS sbplugin_ovsdb_bst_threshold_get (int asic,
 
   return BVIEW_STATUS_SUCCESS;
 }
-
-                                                                                        
-#if 0
-/*********************************************************************
-* @brief  callback function to process Hw trigers
-*
-*
-* @param  [in]  asic                         - unit
-* @param  [in]  event                        - Event
-* @param  [bid] bid                          - BST stat 
-* @param  [port] Port                        - Port ID
-* @param  [cosq] COSQ                        - cosq
-* @param  [in,out] cookie                    - User data 
-*
-* @retval BVIEW_STATUS_INVALID_PARAMETER if input data is invalid.
-* @retval BVIEW_STATUS_FAILURE           if HW trigger process is success.
-* @retval BVIEW_STATUS_SUCCESS           if failed to handle trigger.
-*
-* @notes    none
-*
-*
-*********************************************************************/
-BVIEW_STATUS sbplugin_ovsdb_bst_callback (int asic, SB_OVSDB_SWITCH_EVENT_t event, 
-                       int bid, int port, int cosq, void *cookie)
-{
-  return BVIEW_STATUS_SUCCESS;
-}
-
-#endif
 /*********************************************************************
 * @brief  OVSDB BST feature init
 *

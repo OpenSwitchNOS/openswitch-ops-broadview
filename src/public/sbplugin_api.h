@@ -38,7 +38,7 @@ extern "C"
 *
 *
 *********************************************************************/
-BVIEW_STATUS  sbplugin_common_init ();
+BVIEW_STATUS  sbplugin_common_init (char *ovsdb_sock);
 
 #ifdef	__cplusplus
 }

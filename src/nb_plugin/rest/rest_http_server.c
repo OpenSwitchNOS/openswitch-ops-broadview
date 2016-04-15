@@ -404,32 +404,50 @@ BVIEW_STATUS rest_http_server_run(REST_CONTEXT_t *rest)
     struct sockaddr_in serverAddr;
     struct sockaddr_in peerAddr;
     socklen_t peerLen;
+    BVIEW_STATUS rv = BVIEW_STATUS_SUCCESS;
+    bool  sock_closed = false;
 
     _REST_ASSERT(rest != NULL);
 
-    _REST_LOG(_REST_DEBUG_INFO, "Starting HTTP server on port %d \n", rest->config.localPort);
 
-    /* setup listening socket */
-    listenFd = socket(AF_INET, SOCK_STREAM, 0);
-    _REST_ASSERT_NET_ERROR((listenFd != -1), "Error Creating server socket");
-
-    /* Initialize the server address and bind to the required port */
-    memset(&serverAddr, 0, sizeof (struct sockaddr_in));
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    serverAddr.sin_port = htons(rest->config.localPort);
-
-    /* bind to the socket, */
-    temp = bind(listenFd, (struct sockaddr*) &serverAddr, sizeof (serverAddr));
-    _REST_ASSERT_NET_SOCKET_ERROR((temp != -1), "Error binding to the port",listenFd);
-
-    /* Listen for connections */
-    temp = listen(listenFd, REST_MAX_SESSIONS);
-    _REST_ASSERT_NET_SOCKET_ERROR((temp != -1), "Error listening (making socket as passive) ",listenFd);
-
-    /* Every thing set, start accepting connections */
-    while (true)
+    while (1)
     {
+      /* setup listening socket */
+      rv = rest_server_socket_create(&listenFd);
+
+      _REST_ASSERT_NET_ERROR((rv == BVIEW_STATUS_SUCCESS), "Error Creating server socket");
+
+      /* Initialize the server address and bind to the required port */
+      memset(&serverAddr, 0, sizeof (struct sockaddr_in));
+      serverAddr.sin_family = AF_INET;
+      serverAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+      system_agent_port_get(&rest->config.localPort);
+      serverAddr.sin_port = htons(rest->config.localPort);
+
+      _REST_LOG(_REST_DEBUG_INFO, "Starting HTTP server on port %d \n", rest->config.localPort);
+      /* bind to the socket, */
+      temp = bind(listenFd, (struct sockaddr*) &serverAddr, sizeof (serverAddr));
+      if ((temp == -1) && (errno == EBADF))
+      { 
+        _REST_LOG(_REST_DEBUG_ERROR, "Bind failed with error [%d: %s] \n", errno, strerror(errno));  
+        close(listenFd);
+        continue; 
+      }
+
+      _REST_ASSERT_NET_SOCKET_ERROR((temp != -1), "Error binding to the port",listenFd);
+      /* Listen for connections */
+      temp = listen(listenFd, REST_MAX_SESSIONS);
+      if ((temp == -1) && (errno == EBADF))
+      { 
+        _REST_LOG(_REST_DEBUG_ERROR, "Listen failed with error [%d: %s] \n", errno, strerror(errno));  
+        close(listenFd);
+        continue; 
+      }
+      _REST_ASSERT_NET_SOCKET_ERROR((temp != -1), "Error listening (making socket as passive) ",listenFd);
+
+      /* Every thing set, start accepting connections */
+      while (true)
+      {
         _REST_LOG(_REST_DEBUG_TRACE, "Waiting for HTTP connections on port %d \n", rest->config.localPort);
 
         peerLen = sizeof (peerAddr);
@@ -437,9 +455,11 @@ BVIEW_STATUS rest_http_server_run(REST_CONTEXT_t *rest)
         /* wait for an incoming connection */
         temp = accept(listenFd, (struct sockaddr*) &peerAddr, &peerLen);
         if (temp == -1)
-        {
-          _REST_LOG(_REST_DEBUG_TRACE, "Accept Failed \n");
-          continue;
+        {   
+          _REST_LOG(_REST_DEBUG_ERROR, "Accept failed with error [%d: %s] \n", errno, strerror(errno));  
+          close(listenFd);
+          sock_closed = true;
+          break; 
         }
 
         _REST_LOG(_REST_DEBUG_TRACE, "Received connection \n");
@@ -449,6 +469,12 @@ BVIEW_STATUS rest_http_server_run(REST_CONTEXT_t *rest)
 
         /* process the request */
         rest_process_http_request(rest, connectionFd, peerAddr, peerLen);
+      }
+      if (sock_closed == true)
+      {
+        sock_closed =false;
+        continue;   
+      }  
     }
 
     /* execution  shouldn't reach here */

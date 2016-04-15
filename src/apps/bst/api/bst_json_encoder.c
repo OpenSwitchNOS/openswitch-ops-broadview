@@ -594,11 +594,10 @@ BVIEW_STATUS bst_json_convert_data(const BSTJSON_REPORT_OPTIONS_t *options,
     else
     {
       /* conversion to bytes or cells based on config */
-      if (false == options->statUnitsInCells)
+      if (true == options->statUnitsInCells)
       {
-     /* check if we need to convert the data to cells
-        the report always comes in cells from asic */
-       data = data * (asic->cellToByteConv);
+        /* threshold comes in bytes from asic */
+        data = data / (asic->cellToByteConv);
       }
     }
   }

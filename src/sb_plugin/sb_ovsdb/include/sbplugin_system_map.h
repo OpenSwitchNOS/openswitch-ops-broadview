@@ -322,6 +322,9 @@ BVIEW_STATUS sbplugin_ovsdb_system_max_buf_snapshot_get (int asic,
                               BVIEW_SYSTEM_ASIC_MAX_BUF_SNAPSHOT_DATA_t *maxBufSnapshot,
                               BVIEW_TIME_t * time);
 
+
+BVIEW_STATUS sbplugin_ovsdb_sock_path_set(char *ovsdb_sock);
+
 #ifdef __cplusplus
 }
 #endif
