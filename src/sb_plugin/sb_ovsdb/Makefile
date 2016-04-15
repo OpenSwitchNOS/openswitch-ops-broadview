@@ -24,7 +24,7 @@ ifeq ($(PLATFORM), OP-OVSDB)
 SB_OVSDB_VENDOR_INCLUDE_DIR = $(BV_OVS_INCLUDE)
 endif
 
-CFLAGS += -Wall -g -I$(SB_OVSDB_VENDOR_INCLUDE_DIR) -I../../public -I./include -I./$(SB_PLUGIN_DIR)/include -I../include -I./ -I../../../platform -I./bst/include
+CFLAGS += -Wall -g -I$(SB_OVSDB_VENDOR_INCLUDE_DIR) -I../../public -I./include -I./$(SB_PLUGIN_DIR)/include -I../include -I./ -I../../../platform -I./bst/include -I./common
 
 
 

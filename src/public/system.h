@@ -19,12 +19,15 @@
 #ifndef INCLUDE_SYSTEM_H
 #define INCLUDE_SYSTEM_H
 
+#include <semaphore.h>
 #include "broadview.h"
 #include "asic.h"
 
 /**Timer mode Periodic or Non Periodic*/
 
 #define BVIEW_TIME_CONVERSION_FACTOR 1000
+#define BVIEW_MAX_SOCK_DB_LEN 2048
+
 typedef enum
 {
   PERIODIC_MODE = 0,
@@ -41,6 +44,13 @@ typedef struct _switch_asic_info_
   BVIEW_ASIC_TYPE   asicType;
   int               numPorts;
 }  BVIEW_SWITCH_ASIC_INFO_t;
+
+
+typedef struct __bview_main_thread_params
+{
+  sem_t *bview_init_sem;
+  char  db_path_ptr[BVIEW_MAX_SOCK_DB_LEN];
+} BVIEW_MAIN_THREAD_PARAMS_t;
 
 
 
@@ -61,6 +71,9 @@ typedef struct _switch_asic_info_
 #define SYSTEM_CONFIG_PROPERTY_LOCAL_PORT "agent_port"
 #define SYSTEM_CONFIG_PROPERTY_LOCAL_PORT_DEFAULT 8080
 
+
+#define SYSTEM_TCP_MIN_PORT   1
+#define SYSTEM_TCP_MAX_PORT   65535
 
 
 typedef struct _system_agent_config_
@@ -295,7 +308,8 @@ typedef struct _system_asic_max_buf_snapshot_data_
 * @brief        Function used to initialize various system components
 *               such as openapps driver and calls phase-2 init
 *
-* @param[in]    debug     debug mode of openapps driver
+* @param[in]    
+*               debug     debug mode of openapps driver
 *
 * @retval       NA
 *
@@ -304,7 +318,8 @@ typedef struct _system_asic_max_buf_snapshot_data_
 * @end
 *********************************************************************/
 
-void bview_system_init_ph1(bool debug, bool menu);
+void bview_system_init_ph1(BVIEW_MAIN_THREAD_PARAMS_t *bview_params_ptr, 
+                           bool debug, bool menu);
 
 /*********************************************************************
 * @brief        Function used to initialize various system components
@@ -438,6 +453,38 @@ BVIEW_STATUS system_agent_client_ipaddr_get(char *clientIp);
 * @end
 *********************************************************************/
 BVIEW_STATUS system_agent_client_port_get(int *clientPort);
+
+
+/*********************************************************************
+* @brief      Function used to set the agent port 
+*
+*
+* @param[in]   agent port 
+*
+* @retval     BVIEW_STATUS_SUCCESS
+* @retval     BVIEW_STATUS_FAILURE
+*
+* @note          NA
+*
+* @end
+*********************************************************************/
+BVIEW_STATUS system_agent_port_set(int localPort);
+
+/*********************************************************************
+* @brief      Function used to set the client ip address, client port
+*
+*
+* @param[in]   clientIp pointer to the  client ip address
+* @param[in]   client port
+*
+* @retval     BVIEW_STATUS_SUCCESS
+* @retval     BVIEW_STATUS_FAILURE
+*
+* @note          NA
+*
+* @end
+*********************************************************************/
+BVIEW_STATUS system_agent_client_info_set(char *clientIp, int clientPort);
 
 #endif /* INCLUDE_SYSTEM_H */
 

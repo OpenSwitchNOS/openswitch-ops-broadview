@@ -26,6 +26,7 @@
 #include <arpa/inet.h>
 
 #include "broadview.h"
+#include "system.h"
 #include "rest.h"
 #include "rest_http.h"
 #include "rest_api.h"
@@ -64,6 +65,9 @@ const char json_error_async[] = "{     \
 #define REST_HTTP_JSON_MAX_ELEMENTS 7
 #define REST_JSON_BUFF_LEN 512
 #define REST_JSON_MSG_LEN 64
+
+extern pthread_mutex_t rest_server_mutex;
+static int restServerListenFd = 0; 
 
 /******************************************************************
  * @brief  Initializes the REST component.  
@@ -385,3 +389,57 @@ int rest_agent_config_params_modify(char *ipaddr, unsigned int clientPort)
 }
 
 
+/******************************************************************
+ * @brief  This function creates a web server socket .
+ *
+ * @param[out]   listenFd      pointer to socket fd
+ *
+ * @retval   BVIEW_STATUS_FAILURE Error creating web server socket
+ *
+ * @note
+ *********************************************************************/
+BVIEW_STATUS rest_server_socket_create(int *listenFd)
+{
+  /* Take lock */
+  REST_SERVER_LOCK_TAKE(rest_server_mutex);
+  /* Create a socket */
+  restServerListenFd = socket(AF_INET, SOCK_STREAM, 0);
+  *listenFd = restServerListenFd;
+  /* Give lock */
+  REST_SERVER_LOCK_GIVE(rest_server_mutex);
+
+  if (restServerListenFd == -1)
+  {
+    return BVIEW_STATUS_FAILURE;
+  }
+  return BVIEW_STATUS_SUCCESS;
+}
+
+/******************************************************************
+ * @brief  This function gets web server socket fd.
+ *
+ * @param[out]   listenFd      pointer to socket fd
+ *
+ * @retval   BVIEW_STATUS_FAILURE Error getting web server socket
+ *
+ * @note
+ *********************************************************************/
+BVIEW_STATUS rest_server_socket_get(int *listenFd)
+{
+  /* Take lock */
+  REST_SERVER_LOCK_TAKE(rest_server_mutex);
+  *listenFd = restServerListenFd;
+  /* Give lock */
+  REST_SERVER_LOCK_GIVE(rest_server_mutex);
+  return BVIEW_STATUS_SUCCESS;
+}
+
+BVIEW_STATUS rest_server_port_dynamic_update(int localPort)
+{
+  int serverSocketFd;
+  
+  system_agent_port_set(localPort);
+  rest_server_socket_get(&serverSocketFd);
+  shutdown(serverSocketFd, SHUT_RDWR);
+  return BVIEW_STATUS_SUCCESS;
+}
