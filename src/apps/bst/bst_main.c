@@ -76,10 +76,12 @@ BVIEW_STATUS bst_type_api_get (int type, BVIEW_BST_API_HANDLER_t *handler)
     {BVIEW_BST_CMD_API_CLEAR_THRESHOLD, bst_clear_threshold_set},
     {BVIEW_BST_CMD_API_CLEAR_STATS, bst_clear_stats_set},
     {BVIEW_BST_CMD_API_CLEAR_TRIGGER_COUNT, bst_clear_trigger_count},
-    {BVIEW_BST_CMD_API_ENABLE_BST_ON_TRIGGER, bst_enable_on_trigger_timer_expiry}
+    {BVIEW_BST_CMD_API_ENABLE_BST_ON_TRIGGER, bst_enable_on_trigger_timer_expiry},
+    {BVIEW_BST_CMD_API_UPDATE_TRACK, bst_update_config_set},
+    {BVIEW_BST_CMD_API_UPDATE_FEATURE, bst_update_config_set}
   };
 
-  for (i = 0; i < BVIEW_BST_CMD_API_MAX-1; i++)
+  for (i = 0; i < (sizeof(bst_api_list)/sizeof(BVIEW_BST_API_t)); i++)
   {
     if (type == bst_api_list[i].bst_command)
     {
@@ -333,6 +335,15 @@ BVIEW_STATUS bst_app_main (void)
       }
 
       rv = handler(&msg_data);
+      
+     if ((BVIEW_BST_CMD_API_UPDATE_TRACK == msg_data.msg_type)||
+         (BVIEW_BST_CMD_API_UPDATE_FEATURE == msg_data.msg_type))
+     {
+       /* no need to send any json response.
+         */
+      continue;
+     }
+      
 
       reply_data.rv = rv;
 
@@ -420,46 +431,97 @@ BVIEW_STATUS bst_app_config_init (unsigned int num_units)
     }
     bstjson_memory_init();
 
-    /* bst enable */
-    ptr->config.bstEnable = BVIEW_BST_DEFAULT_ENABLE;
-    /* send async reports  */
-    ptr->config.sendAsyncReports = BVIEW_BST_PERIODIC_REPORT_DEFAULT;
-    /* collection interval  */
-    ptr->config.collectionInterval = BVIEW_BST_DEFAULT_INTERVAL;
+    memset(&bstMode, 0, sizeof(BVIEW_BST_CONFIG_t));
+    memset(ptr,0, sizeof(BVIEW_BST_CFG_PARAMS_t));
     /* stats in cells or bytes.  */
+    ptr->config.bstEnable = BVIEW_BST_DEFAULT_ENABLE;
+    ptr->config.sendAsyncReports = BVIEW_BST_PERIODIC_REPORT_DEFAULT;
+    ptr->config.collectionInterval = bstMode.collectionPeriod;
     ptr->config.statUnitsInCells = BVIEW_BST_DEFAULT_STATS_UNITS;
-    ptr->config.statsInPercentage = BVIEW_BST_DEFAULT_STATS_PERCENTAGE;
     ptr->config.bstMaxTriggers = BVIEW_BST_DEFAULT_MAX_TRIGGERS;
     ptr->config.sendSnapshotOnTrigger = BVIEW_BST_DEFAULT_SNAPSHOT_TRIGGER;
+    ptr->config.statsInPercentage = BVIEW_BST_DEFAULT_STATS_PERCENTAGE;
     ptr->config.triggerTransmitInterval = BVIEW_BST_DEFAULT_TRIGGER_INTERVAL;
     ptr->config.sendIncrementalReport = BVIEW_BST_DEFAULT_SEND_INCR_REPORT;
 
 
-    /* enable device tracking   */
-    ptr->track.trackDevice = BVIEW_BST_DEFAULT_TRACK_DEVICE;
-    /* enable ingress tracking p + pg   */
-    ptr->track.trackIngressPortPriorityGroup = BVIEW_BST_DEFAULT_TRACK_IN_P_PG;
-    /* enable ingress tracking p + sp  */
-    ptr->track.trackIngressPortServicePool = BVIEW_BST_DEFAULT_TRACK_IN_P_SP;
-    /* enable ingress tracking  sp  */
-    ptr->track.trackIngressServicePool = BVIEW_BST_DEFAULT_TRACK_IN_SP;
-    /* enable egress tracking P+ sp  */
-    ptr->track.trackEgressPortServicePool = BVIEW_BST_DEFAULT_TRACK_E_P_SP;
-    /* enable egress tracking sp  */
-    ptr->track.trackEgressServicePool = BVIEW_BST_DEFAULT_TRACK_E_SP;
-    /* enable egress tracking uc queues  */
-    ptr->track.trackEgressUcQueue = BVIEW_BST_DEFAULT_TRACK_E_UC_Q;
-    /* enable egress tracking uc queue grp */
-    ptr->track.trackEgressUcQueueGroup = BVIEW_BST_DEFAULT_TRACK_E_UC_QG;
-    /* enable egress tracking mc queue grp */
-    ptr->track.trackEgressMcQueue = BVIEW_BST_DEFAULT_TRACK_E_MC_Q;
-    /* enable egress tracking cpu queue grp */
-    ptr->track.trackEgressCpuQueue = BVIEW_BST_DEFAULT_TRACK_E_CPU_Q;
-    /* enable egress tracking rqe queue grp */
-    ptr->track.trackEgressRqeQueue = BVIEW_BST_DEFAULT_TRACK_MODE;
-    /* enable  tracking mode to current */
 
-    ptr->track.trackPeakStats = false;
+    ptr->track.trackDevice = BVIEW_BST_DEFAULT_TRACK_DEVICE;
+    ptr->track.trackIngressPortPriorityGroup = BVIEW_BST_DEFAULT_TRACK_IN_P_PG;
+    ptr->track.trackIngressPortServicePool = BVIEW_BST_DEFAULT_TRACK_IN_P_SP;
+    ptr->track.trackIngressServicePool = BVIEW_BST_DEFAULT_TRACK_IN_SP;
+    ptr->track.trackEgressPortServicePool = BVIEW_BST_DEFAULT_TRACK_E_P_SP;
+    ptr->track.trackEgressServicePool = BVIEW_BST_DEFAULT_TRACK_E_SP;
+    ptr->track.trackEgressUcQueue = BVIEW_BST_DEFAULT_TRACK_E_UC_Q;
+    ptr->track.trackEgressUcQueueGroup = BVIEW_BST_DEFAULT_TRACK_E_UC_QG;
+    ptr->track.trackEgressMcQueue = BVIEW_BST_DEFAULT_TRACK_E_MC_Q;
+    ptr->track.trackEgressCpuQueue = BVIEW_BST_DEFAULT_TRACK_E_CPU_Q;
+    ptr->track.trackEgressRqeQueue = BVIEW_BST_DEFAULT_TRACK_E_RQE_Q;
+
+    /* prepare the track mask */
+    bst_realm_to_mask(&ptr->track, &ptr->track.trackMask);
+
+    bstMode.enableStatsMonitoring = ptr->config.bstEnable;
+    bstMode.mode = BVIEW_BST_DEFAULT_TRACK_MODE;
+    bstMode.enablePeriodicCollection = true;
+    bstMode.collectionPeriod = ptr->config.collectionInterval; 
+    bstMode.bstMaxTriggers = ptr->config.bstMaxTriggers; 
+    bstMode.sendSnapshotOnTrigger = ptr->config.sendSnapshotOnTrigger;
+
+
+    bstMode.trackInit = true;
+    bstMode.trackMask = ptr->track.trackMask; 
+
+
+    sbapi_bst_config_get(unit_id, &bstMode);
+
+    /* bst enable */
+    if (bstMode.enableStatsMonitoring != ptr->config.bstEnable)
+    {
+      ptr->config.bstEnable = bstMode.enableStatsMonitoring;
+    }
+    /* collection interval  */
+    if (bstMode.collectionPeriod != ptr->config.collectionInterval)
+    {
+      ptr->config.collectionInterval = bstMode.collectionPeriod;
+    }
+
+    if (bstMode.bstMaxTriggers != ptr->config.bstMaxTriggers)
+    {
+      ptr->config.bstMaxTriggers = bstMode.bstMaxTriggers;
+    }
+
+    if (bstMode.sendSnapshotOnTrigger != ptr->config.sendSnapshotOnTrigger)
+    {
+      ptr->config.sendSnapshotOnTrigger = bstMode.sendSnapshotOnTrigger;
+    }
+
+    bst_mask_to_realm(bstMode.trackMask, &ptr->track);
+    ptr->track.trackMask = bstMode.trackMask;
+
+    if (bstMode.mode != BVIEW_BST_DEFAULT_TRACK_MODE)
+    {
+      if (BVIEW_BST_DEFAULT_TRACK_MODE == BVIEW_BST_MODE_CURRENT)
+      {
+	ptr->track.trackPeakStats = false;
+      }
+      else
+      {
+	ptr->track.trackPeakStats = true;
+      }
+    }
+    else
+    {
+      if (BVIEW_BST_DEFAULT_TRACK_MODE == BVIEW_BST_MODE_CURRENT)
+      {
+	ptr->track.trackPeakStats = false;
+      }
+      else
+      {
+	ptr->track.trackPeakStats = true;
+      }
+    }
+
 
     /* Initialize the bst timer array */
     bst_data_ptr->bst_collection_timer.unit = unit_id;
@@ -468,38 +530,42 @@ BVIEW_STATUS bst_app_config_init (unsigned int num_units)
     bst_data_ptr->bst_trigger_timer.unit = unit_id;
 
     /* push default values to asic */
-
-    rv =  sbapi_bst_clear_thresholds(unit_id);
-    if (BVIEW_STATUS_SUCCESS != rv)
-    {
-      LOG_POST (BVIEW_LOG_ERROR, 
-          "threshold clear not successful for the unit. %d \r\n", 
-          unit_id);
-    }
-    memset (&bstMode, 0, sizeof (BVIEW_BST_CONFIG_t));
-    bstMode.enableStatsMonitoring = BVIEW_BST_DEFAULT_ENABLE;
+    bstMode.trackInit = true;
+    bstMode.enableStatsMonitoring = ptr->config.bstEnable;
     bstMode.enableDeviceStatsMonitoring = BVIEW_BST_DEFAULT_TRACK_DEVICE;
     bstMode.enableIngressStatsMonitoring = BVIEW_BST_DEFAULT_TRACK_INGRESS;
     bstMode.enableEgressStatsMonitoring = BVIEW_BST_DEFAULT_TRACK_EGRESS;
-    bstMode.mode = BVIEW_BST_MODE_CURRENT;
-  
+    if(true == ptr->track.trackPeakStats)
+    {
+      bstMode.mode = BVIEW_BST_MODE_PEAK;
+    }
+    else
+    {
+      bstMode.mode = BVIEW_BST_MODE_CURRENT;
+    }
+
+    bstMode.statUnitsInCells = ptr->config.statUnitsInCells;
+    bstMode.statsInPercentage = ptr->config.statsInPercentage;
+    bstMode.triggerTransmitInterval = ptr->config.triggerTransmitInterval;
+    bstMode.sendIncrementalReport = ptr->config.sendIncrementalReport;
+
     if (BVIEW_STATUS_SUCCESS != sbapi_bst_config_set (unit_id, &bstMode))
     {
       LOG_POST (BVIEW_LOG_ERROR,
-                "Failed to set bst config params for unit %d\r\n", unit_id);
+	  "Failed to set bst config params for unit %d\r\n", unit_id);
       return BVIEW_STATUS_FAILURE;
     }
 
     if ((false != ptr->config.sendAsyncReports) && (ptr->config.bstEnable != false))
     {
       /* register for timer callback only if reports need
-         to be sent asyncronously */
+	 to be sent asyncronously */
       rv = bst_periodic_collection_timer_add (unit_id);
       if (BVIEW_STATUS_SUCCESS != rv)
       {
-        LOG_POST (BVIEW_LOG_ERROR,
-            "Failed to register with timer  for callbacks for  unit %d\r\n", unit_id);
-        return BVIEW_STATUS_FAILURE;
+	LOG_POST (BVIEW_LOG_ERROR,
+	    "Failed to register with timer  for callbacks for  unit %d\r\n", unit_id);
+	return BVIEW_STATUS_FAILURE;
       }
     }
   }
@@ -1073,6 +1139,7 @@ BVIEW_STATUS bst_main ()
             sizeof (BVIEW_BST_REPORT_SNAPSHOT_t));
   }
 
+    bstjson_memory_init();
   LOG_POST (BVIEW_LOG_INFO,
               "bst application: bst memory allocated successfully\r\n");
 
@@ -1273,4 +1340,196 @@ void bst_set_realm_to_collect(char *realm, BVIEW_BST_REPORT_OPTIONS_t *options)
 
   return;
 }
+
+BVIEW_STATUS bst_plugin_cb(void *request)
+{
+  BVIEW_BST_REQUEST_MSG_t msg_data;
+  BVIEW_STATUS rv= BVIEW_STATUS_SUCCESS;
+  if (NULL == request)
+  {
+   return BVIEW_STATUS_FAILURE;
+  }
+
+  memcpy(&msg_data, request, sizeof(BVIEW_BST_REQUEST_MSG_t));
+
+  /* Send the message to the bst application */
+  rv = bst_send_request (&msg_data);
+  if (BVIEW_STATUS_SUCCESS != rv)
+  {
+    LOG_POST (BVIEW_LOG_ERROR,
+        "Failed to send plugin message to bst application. err = %d\r\n", rv);
+       return BVIEW_STATUS_FAILURE;
+  }
+  return BVIEW_STATUS_SUCCESS;
+ 
+}
+
+/*********************************************************************
+* @brief  Prepare MASK of ream's
+*
+* @param[in]   data                    - Pointer to BST config
+* @param[in]   config                  - Pointer to OVSDB config
+*
+* @notes    none
+*
+*
+*********************************************************************/
+void bst_mask_to_realm (int trackingMask, 
+                        BVIEW_BST_TRACK_PARAMS_t *data)
+{
+
+  if (trackingMask & (1 << BVIEW_BST_INGRESS_PORT_PG))
+  {
+    data->trackIngressPortPriorityGroup = true;
+  }
+  else
+  {
+    data->trackIngressPortPriorityGroup = false;
+  }
+  if (trackingMask & (1 << BVIEW_BST_INGRESS_PORT_SP))
+  {
+    data->trackIngressPortServicePool = true;
+  }
+  else
+  {
+   data->trackIngressPortServicePool = false;
+  }
+  if (trackingMask & (1 << BVIEW_BST_INGRESS_SP))
+  {
+    data->trackIngressServicePool = true;
+  }
+  else
+  {
+    data->trackIngressServicePool = false;
+  }
+  if (trackingMask & (1 << BVIEW_BST_EGRESS_PORT_SP))
+  {
+    data->trackEgressPortServicePool = true;
+  }
+  else
+  {
+    data->trackEgressPortServicePool = false;
+  }
+  if (trackingMask & (1 << BVIEW_BST_EGRESS_SP))
+  {
+    data->trackEgressServicePool = true;
+  }
+  else
+  {
+    data->trackEgressServicePool = false;
+  }
+  if (trackingMask & (1 << BVIEW_BST_EGRESS_UC_QUEUE))
+  {
+    data->trackEgressUcQueue = true;
+  }
+  else
+  {
+    data->trackEgressUcQueue = false;
+  }
+  if (trackingMask & (1 << BVIEW_BST_EGRESS_UC_QUEUEGROUPS))
+  {
+    data->trackEgressUcQueueGroup = true;
+  }
+  else
+  {
+    data->trackEgressUcQueueGroup = false;
+  }
+  if (trackingMask & (1 << BVIEW_BST_EGRESS_MC_QUEUE))
+  {
+    data->trackEgressMcQueue = true;
+  }
+  else
+  {
+   data->trackEgressMcQueue = false;
+  }
+  if (trackingMask & (1 << BVIEW_BST_EGRESS_CPU_QUEUE))
+  {
+    data->trackEgressCpuQueue = true;
+  }
+  else
+  {
+    data->trackEgressCpuQueue = false;
+  }
+  if (trackingMask & (1 << BVIEW_BST_EGRESS_RQE_QUEUE))
+  {
+    data->trackEgressRqeQueue = true;
+  }
+  else
+  {
+   data->trackEgressRqeQueue = false;
+  }
+  if (trackingMask & (1 << BVIEW_BST_DEVICE))
+  {
+    data->trackDevice = true;
+  }
+  else
+  {
+    data->trackDevice = false;
+  }
+  return;
+}
+ 
+/*********************************************************************
+* @brief  Prepare MASK of ream's
+*
+* @param[in]   data                    - Pointer to BST config
+* @param[in]   config                  - Pointer to OVSDB config
+*
+* @notes    none
+*
+*
+*********************************************************************/
+void bst_realm_to_mask (BVIEW_BST_TRACK_PARAMS_t *data,
+                                int *mask)
+{
+  int trackingMask = 0;
+  if (data->trackIngressPortPriorityGroup)
+  {
+    trackingMask |= (1 << BVIEW_BST_INGRESS_PORT_PG);
+  }
+  if (data->trackIngressPortServicePool)
+  {
+    trackingMask |= (1 << BVIEW_BST_INGRESS_PORT_SP);
+  }
+  if (data->trackIngressServicePool)
+  {
+    trackingMask |= (1 << BVIEW_BST_INGRESS_SP);
+  }
+  if (data->trackEgressPortServicePool)
+  {
+    trackingMask |= (1 << BVIEW_BST_EGRESS_PORT_SP);
+  }
+  if (data->trackEgressServicePool)
+  {
+    trackingMask |= (1 << BVIEW_BST_EGRESS_SP);
+  }
+  if (data->trackEgressUcQueue)
+  {
+    trackingMask |= (1 << BVIEW_BST_EGRESS_UC_QUEUE);
+  }
+  if (data->trackEgressUcQueueGroup)
+  {
+    trackingMask |= (1 << BVIEW_BST_EGRESS_UC_QUEUEGROUPS);
+  }
+  if (data->trackEgressMcQueue)
+  {
+    trackingMask |= (1 << BVIEW_BST_EGRESS_MC_QUEUE);
+  }
+  if (data->trackEgressCpuQueue)
+  {
+    trackingMask |= (1 << BVIEW_BST_EGRESS_CPU_QUEUE);
+  }
+  if (data->trackEgressRqeQueue)
+  {
+    trackingMask |= (1 <<  BVIEW_BST_EGRESS_RQE_QUEUE);
+  }
+  if (data->trackDevice)
+  {
+    trackingMask |= (1 << BVIEW_BST_DEVICE);
+  }
+  
+  *mask = trackingMask;
+  return;
+}
+ 
 

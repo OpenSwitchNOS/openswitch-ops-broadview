@@ -24,6 +24,13 @@ extern "C"
 {
 #endif
 
+#define BST_OVSDB_REALM_SIZE          128
+typedef struct _realm_map_
+{
+  char realmName[BST_OVSDB_REALM_SIZE];
+  int realmId;
+} BVIEW_BST_REALM_MAP_t;
+
 /*********************************************************************
 * @brief           Set default connection parameters                                 
 *
@@ -95,6 +102,49 @@ BVIEW_STATUS bst_ovsdb_bst_config_commit (int asic ,
 *
 *********************************************************************/
 void bst_ovsdb_monitor();
+
+/*********************************************************************
+* @brief   Commit Column 'enabled' in bufmon table
+*
+* @param[in]   asic              -   ASIC ID
+* @param[in]   config            -   Pointer to BST config Data.
+*
+* @retval
+*
+* @notes
+*
+*
+*
+*********************************************************************/
+BVIEW_STATUS bst_ovsdb_bst_tracking_commit (int asic ,
+                                          BVIEW_OVSDB_CONFIG_DATA_t *config);
+
+/*********************************************************************
+* @brief       Commit column "trigger_threshold" in table "bufmon" to
+*              Zero.
+*
+* @param[in]   asic             -  ASIC ID
+*
+* @notes
+*
+*
+*
+*********************************************************************/
+BVIEW_STATUS bst_ovsdb_clear_thresholds_commit (int asic);
+
+/*********************************************************************
+* @brief       Commit Clear Stats to OVSDB.
+*              .
+*
+* @param[in]   asic             -  ASIC ID
+*
+* @notes       Set all Stats to Zero
+*
+*
+*
+*********************************************************************/
+BVIEW_STATUS bst_ovsdb_clear_stats_commit (int asic);
+
 
 #ifdef __cplusplus
 }

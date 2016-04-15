@@ -25,6 +25,7 @@
 #include "json.h"
 
 #include "cJSON.h"
+#include "bst.h"
 #include "configure_bst_tracking.h"
 
 /******************************************************************
@@ -133,7 +134,6 @@ BVIEW_STATUS bstjson_configure_bst_tracking (void *cookie, char *jsonBuffer, int
     /* Ensure  that the number 'track-peak-stats' is within range of [0,1] */
     JSON_CHECK_VALUE_AND_CLEANUP (command.trackPeakStats, 0, 1);
 
-
     /* Parsing and Validating 'track-ingress-port-priority-group' from JSON buffer */
     json_trackIngressPortPriorityGroup = cJSON_GetObjectItem(params, "track-ingress-port-priority-group");
     JSON_VALIDATE_JSON_POINTER(json_trackIngressPortPriorityGroup, "track-ingress-port-priority-group", BVIEW_STATUS_INVALID_JSON);
@@ -142,6 +142,11 @@ BVIEW_STATUS bstjson_configure_bst_tracking (void *cookie, char *jsonBuffer, int
     command.trackIngressPortPriorityGroup = json_trackIngressPortPriorityGroup->valueint;
     /* Ensure  that the number 'track-ingress-port-priority-group' is within range of [0,1] */
     JSON_CHECK_VALUE_AND_CLEANUP (command.trackIngressPortPriorityGroup, 0, 1);
+    if(command.trackIngressPortPriorityGroup)
+    {
+      command.trackMask = (command.trackMask | (1 << BVIEW_BST_INGRESS_PORT_PG));
+    }
+    
 
 
     /* Parsing and Validating 'track-ingress-port-service-pool' from JSON buffer */
@@ -152,7 +157,10 @@ BVIEW_STATUS bstjson_configure_bst_tracking (void *cookie, char *jsonBuffer, int
     command.trackIngressPortServicePool = json_trackIngressPortServicePool->valueint;
     /* Ensure  that the number 'track-ingress-port-service-pool' is within range of [0,1] */
     JSON_CHECK_VALUE_AND_CLEANUP (command.trackIngressPortServicePool, 0, 1);
-
+    if(command.trackIngressPortServicePool)
+    {
+      command.trackMask = (command.trackMask | (1 << BVIEW_BST_INGRESS_PORT_SP));
+    }
 
     /* Parsing and Validating 'track-ingress-service-pool' from JSON buffer */
     json_trackIngressServicePool = cJSON_GetObjectItem(params, "track-ingress-service-pool");
@@ -162,6 +170,10 @@ BVIEW_STATUS bstjson_configure_bst_tracking (void *cookie, char *jsonBuffer, int
     command.trackIngressServicePool = json_trackIngressServicePool->valueint;
     /* Ensure  that the number 'track-ingress-service-pool' is within range of [0,1] */
     JSON_CHECK_VALUE_AND_CLEANUP (command.trackIngressServicePool, 0, 1);
+    if(command.trackIngressServicePool)
+    {
+      command.trackMask = (command.trackMask | (1 << BVIEW_BST_INGRESS_SP));
+    }
 
 
     /* Parsing and Validating 'track-egress-port-service-pool' from JSON buffer */
@@ -172,6 +184,10 @@ BVIEW_STATUS bstjson_configure_bst_tracking (void *cookie, char *jsonBuffer, int
     command.trackEgressPortServicePool = json_trackEgressPortServicePool->valueint;
     /* Ensure  that the number 'track-egress-port-service-pool' is within range of [0,1] */
     JSON_CHECK_VALUE_AND_CLEANUP (command.trackEgressPortServicePool, 0, 1);
+    if(command.trackEgressPortServicePool)
+    {
+      command.trackMask = (command.trackMask | (1 << BVIEW_BST_EGRESS_PORT_SP));
+    }
 
 
     /* Parsing and Validating 'track-egress-service-pool' from JSON buffer */
@@ -182,6 +198,10 @@ BVIEW_STATUS bstjson_configure_bst_tracking (void *cookie, char *jsonBuffer, int
     command.trackEgressServicePool = json_trackEgressServicePool->valueint;
     /* Ensure  that the number 'track-egress-service-pool' is within range of [0,1] */
     JSON_CHECK_VALUE_AND_CLEANUP (command.trackEgressServicePool, 0, 1);
+    if(command.trackEgressServicePool)
+    {
+      command.trackMask = (command.trackMask | (1 << BVIEW_BST_EGRESS_SP));
+    }
 
 
     /* Parsing and Validating 'track-egress-uc-queue' from JSON buffer */
@@ -192,6 +212,10 @@ BVIEW_STATUS bstjson_configure_bst_tracking (void *cookie, char *jsonBuffer, int
     command.trackEgressUcQueue = json_trackEgressUcQueue->valueint;
     /* Ensure  that the number 'track-egress-uc-queue' is within range of [0,1] */
     JSON_CHECK_VALUE_AND_CLEANUP (command.trackEgressUcQueue, 0, 1);
+    if(command.trackEgressUcQueue)
+    {
+      command.trackMask = (command.trackMask | (1 << BVIEW_BST_EGRESS_UC_QUEUE));
+    }
 
 
     /* Parsing and Validating 'track-egress-uc-queue-group' from JSON buffer */
@@ -202,6 +226,10 @@ BVIEW_STATUS bstjson_configure_bst_tracking (void *cookie, char *jsonBuffer, int
     command.trackEgressUcQueueGroup = json_trackEgressUcQueueGroup->valueint;
     /* Ensure  that the number 'track-egress-uc-queue-group' is within range of [0,1] */
     JSON_CHECK_VALUE_AND_CLEANUP (command.trackEgressUcQueueGroup, 0, 1);
+    if(command.trackEgressUcQueueGroup)
+    {
+      command.trackMask = (command.trackMask | (1 << BVIEW_BST_EGRESS_UC_QUEUEGROUPS));
+    }
 
 
     /* Parsing and Validating 'track-egress-mc-queue' from JSON buffer */
@@ -212,6 +240,10 @@ BVIEW_STATUS bstjson_configure_bst_tracking (void *cookie, char *jsonBuffer, int
     command.trackEgressMcQueue = json_trackEgressMcQueue->valueint;
     /* Ensure  that the number 'track-egress-mc-queue' is within range of [0,1] */
     JSON_CHECK_VALUE_AND_CLEANUP (command.trackEgressMcQueue, 0, 1);
+    if(command.trackEgressMcQueue)
+    {
+      command.trackMask = (command.trackMask | (1 << BVIEW_BST_EGRESS_MC_QUEUE));
+    }
 
 
     /* Parsing and Validating 'track-egress-cpu-queue' from JSON buffer */
@@ -222,6 +254,10 @@ BVIEW_STATUS bstjson_configure_bst_tracking (void *cookie, char *jsonBuffer, int
     command.trackEgressCpuQueue = json_trackEgressCpuQueue->valueint;
     /* Ensure  that the number 'track-egress-cpu-queue' is within range of [0,1] */
     JSON_CHECK_VALUE_AND_CLEANUP (command.trackEgressCpuQueue, 0, 1);
+    if(command.trackEgressCpuQueue)
+    {
+      command.trackMask = (command.trackMask | (1 << BVIEW_BST_EGRESS_CPU_QUEUE));
+    }
 
 
     /* Parsing and Validating 'track-egress-rqe-queue' from JSON buffer */
@@ -232,6 +268,10 @@ BVIEW_STATUS bstjson_configure_bst_tracking (void *cookie, char *jsonBuffer, int
     command.trackEgressRqeQueue = json_trackEgressRqeQueue->valueint;
     /* Ensure  that the number 'track-egress-rqe-queue' is within range of [0,1] */
     JSON_CHECK_VALUE_AND_CLEANUP (command.trackEgressRqeQueue, 0, 1);
+    if(command.trackEgressRqeQueue)
+    {
+      command.trackMask = (command.trackMask | (1 << BVIEW_BST_EGRESS_RQE_QUEUE));
+    }
 
 
     /* Parsing and Validating 'track-device' from JSON buffer */
@@ -242,6 +282,10 @@ BVIEW_STATUS bstjson_configure_bst_tracking (void *cookie, char *jsonBuffer, int
     command.trackDevice = json_trackDevice->valueint;
     /* Ensure  that the number 'track-device' is within range of [0,1] */
     JSON_CHECK_VALUE_AND_CLEANUP (command.trackDevice, 0, 1);
+    if(command.trackDevice)
+    {
+      command.trackMask = (command.trackMask | (1 << BVIEW_BST_DEVICE));
+    }
 
 
     /* Send the 'command' along with 'asicId' and 'cookie' to the Application thread. */
