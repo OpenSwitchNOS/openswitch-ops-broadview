@@ -44,13 +44,21 @@ int sbOvsdbDebugFlag = false;
 *
 *
 *********************************************************************/
-BVIEW_STATUS  sbplugin_common_init ()
+BVIEW_STATUS  sbplugin_common_init (char *ovsdb_sock)
 {
   BVIEW_STATUS      rv = BVIEW_STATUS_SUCCESS;
   unsigned int      featureIndex = 0;
 
   sbPlugin.numSupportedFeatures = 0;
-  
+ 
+  /* Set ovsdb sock */
+  rv = sbplugin_ovsdb_sock_path_set(ovsdb_sock);
+  if (rv != BVIEW_STATUS_SUCCESS)
+  {
+    SB_OVSDB_DEBUG_PRINT ("Failed to set OVSDB socket path");
+    return rv;
+  }
+ 
   /* Init SYSTEM feature*/
   rv = sbplugin_ovsdb_system_init (&ovsdbSystemFeat);
   if (rv != BVIEW_STATUS_SUCCESS)

@@ -219,7 +219,7 @@ infra_target += \
 #
 # First declare most of the targets in this make file to be phony (not real files)
 #
-.PHONY: clean clean-all dump-variables openapps all release $(infra_target) $(agent_app_target) $(ref_app_target) sbredirector $(sb_plugin_target)
+.PHONY: clean clean-all dump-variables openapps all release $(infra_target) $(agent_app_target) $(ref_app_target) sbredirector $(sb_plugin_target) openapps_cli
 
 .DEFAULT_GOAL := all
 
@@ -235,6 +235,7 @@ infra_target += \
 # all		  : builds everything and is the default target
 # examples        : builds the example applications.
 # openapps        : builds the openapps shared object library.
+# openapps_cli    : builds cli shared object library
 
 #CHIP specific macros
 ifeq ($(PLATFORM), td2_svk)
@@ -307,14 +308,16 @@ infra_target_all += \
 
 export common_include_list
 common_include_list += \
+	-I$(BV_OVS_INCLUDE) \
 	-I$(OPENAPPS_BASE)/src/public \
+	-I$(OPENAPPS_BASE)/src/nb_plugin/rest/ \
 	-I$(OPENAPPS_OUTPATH) \
 	-c \
 	$(OPENAPPS_BASE)/src/apps/agent/agent.c \
 	-o \
 	 $(OPENAPPS_OUTPATH)/agent.o
 
-all: release openapps_out_dir $(add_target) openapps $(vend_target) $(infra_target_all) $(app_target) $(ref_app_target)
+all: release openapps_out_dir $(add_target) openapps $(vend_target) $(infra_target_all) $(app_target) $(ref_app_target) openapps_cli
 
 	$(CC) $(CFLAGS) $(common_include_list)
 	$(CC) $(MYCFLAGS) -o $(OPENAPP_DELIVERABLES_DIR)/BroadViewAgent $(OPENAPPS_OUTPATH)/agent.o \
@@ -413,6 +416,9 @@ endif
 
 #openaps target depends on the appropriate driver
 openapps: $(sbdriver)
+
+#openapps cli
+openapps_cli: $(apps_cli)
 
 #Compiles CJSON
 vend_cjson clean-vend_cjson debug-vend_cjson:

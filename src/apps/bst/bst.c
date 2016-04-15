@@ -204,20 +204,13 @@ BVIEW_STATUS bst_config_feature_set (BVIEW_BST_REQUEST_MSG_t * msg_data)
         "Unable to extract the bst mode from asic. err: %d \r\n", rv);
     return rv;
   }
- 
-   /* now check if the h/w is set to the same state as requested.
-      if not, then only program the asic.. else not required */
-
-  if (bstMode.enableStatsMonitoring == msg_data->request.config.bstEnable)
-  {
-    /* every thing is fine. both are in sync.. just return */
-    return rv;
-  }
 
  /* Set the asic with the desired config to control bst */  
   bstMode.enableStatsMonitoring = msg_data->request.config.bstEnable;
   bstMode.enablePeriodicCollection = ptr->sendAsyncReports;
   bstMode.collectionPeriod = ptr->collectionInterval;
+  bstMode.bstMaxTriggers = ptr->bstMaxTriggers;
+  bstMode.sendSnapshotOnTrigger = ptr->sendSnapshotOnTrigger;
   rv = sbapi_bst_config_set (msg_data->unit, &bstMode);
   if (BVIEW_STATUS_SUCCESS == rv)
   {
@@ -392,6 +385,18 @@ BVIEW_STATUS bst_config_track_set (BVIEW_BST_REQUEST_MSG_t * msg_data)
   bstMode.enableIngressStatsMonitoring = trackIngress;
   bstMode.enableEgressStatsMonitoring = trackEgress;
   bstMode.mode = trackPeakStats;
+  bstMode.trackMask = msg_data->request.track.trackMask;
+
+  bstMode.enablePeriodicCollection =  config_ptr->sendAsyncReports;
+  bstMode.collectionPeriod =  config_ptr->collectionInterval;
+  bstMode.bstMaxTriggers =  config_ptr->bstMaxTriggers;
+  bstMode.sendSnapshotOnTrigger = config_ptr->sendSnapshotOnTrigger;
+  bstMode.statUnitsInCells = config_ptr->statUnitsInCells;
+  bstMode.statsInPercentage = config_ptr->statsInPercentage;
+  bstMode.triggerTransmitInterval = config_ptr->triggerTransmitInterval;
+  bstMode.sendIncrementalReport = config_ptr->sendIncrementalReport;
+
+
 /* program the asic. */
   rv = sbapi_bst_config_set (msg_data->unit, &bstMode);
   if (BVIEW_STATUS_SUCCESS == rv)
@@ -998,5 +1003,102 @@ BVIEW_STATUS bst_module_register ()
   return rv;
 }
 
+BVIEW_STATUS bst_update_config_set(BVIEW_BST_REQUEST_MSG_t * msg_data)
+{
+  BVIEW_BST_TRACK_PARAMS_t *track_ptr;
+  BVIEW_BST_CONFIG_PARAMS_t *ptr;
+  bool timerUpdateReqd = false;
+  BVIEW_BST_CONFIG_t bstMode;
+  BVIEW_STATUS rv = BVIEW_STATUS_SUCCESS;
 
+  if (NULL == msg_data)
+    return BVIEW_STATUS_FAILURE;
+
+  memset (&bstMode, 0, sizeof (BVIEW_BST_CONFIG_t));
+  rv = sbapi_bst_config_get (msg_data->unit, &bstMode);
+  if (BVIEW_STATUS_SUCCESS != rv)
+  {
+    /* Why the h/w call has failed.. post the error with the error reason. */
+    LOG_POST (BVIEW_LOG_ERROR,
+	"Unable to extract the bst mode from asic. err: %d \r\n", rv);
+    return rv;
+  }
+
+  if (msg_data->msg_type == BVIEW_BST_CMD_API_UPDATE_FEATURE)
+  {
+    /* get the configuration structure pointer  for the desired unit */
+    ptr = BST_CONFIG_FEATURE_PTR_GET (msg_data->unit);
+    if (NULL == ptr)
+    {
+      return BVIEW_STATUS_INVALID_PARAMETER;
+    }
+
+    BST_RWLOCK_WR_LOCK(msg_data->unit);
+
+    /* update the bst enable */
+    if (ptr->bstEnable != bstMode.enableStatsMonitoring)
+    {
+      ptr->bstEnable = bstMode.enableStatsMonitoring;
+    }
+
+    /* Collection interval has changed.
+       so need to register the modified interval with the timer */
+    if (ptr->collectionInterval != bstMode.collectionPeriod)
+    {
+      ptr->collectionInterval = bstMode.collectionPeriod;
+     /* if BST is enabled and the async periodic reporting
+        is enabled, then update the timer */
+      if ((true == ptr->bstEnable) &&
+           (true == ptr->sendAsyncReports))
+      {
+        timerUpdateReqd = true;
+      } 
+    }
+
+    /* update send snap shot on trigger */
+    if (ptr->sendSnapshotOnTrigger != bstMode.sendSnapshotOnTrigger)
+    {
+      ptr->sendSnapshotOnTrigger = bstMode.sendSnapshotOnTrigger;
+    }
+
+    /* update max triggers */
+    if (ptr->bstMaxTriggers != bstMode.bstMaxTriggers)
+    {
+      ptr->bstMaxTriggers = bstMode.bstMaxTriggers;
+    }
+    BST_RWLOCK_UNLOCK(msg_data->unit);
+    /*
+       Register with the timer for periodic callbacks */
+    if (true == timerUpdateReqd)
+    {
+      bst_periodic_collection_timer_add (msg_data->unit);
+    }
+
+  }
+  if (msg_data->msg_type == BVIEW_BST_CMD_API_UPDATE_TRACK)
+  {
+
+    track_ptr = BST_CONFIG_TRACK_PTR_GET (msg_data->unit);
+
+    if ((NULL == track_ptr))
+    {
+      return BVIEW_STATUS_INVALID_PARAMETER;
+    }
+
+    BST_RWLOCK_WR_LOCK(msg_data->unit);
+
+    bst_mask_to_realm(bstMode.trackMask, track_ptr);
+    if (bstMode.mode == BVIEW_BST_MODE_CURRENT)
+    {
+      track_ptr->trackPeakStats = false;
+    }
+    else
+    {
+      track_ptr->trackPeakStats = true;
+    }
+    BST_RWLOCK_UNLOCK(msg_data->unit);
+  }
+
+  return BVIEW_STATUS_SUCCESS;
+}
 

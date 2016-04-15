@@ -203,6 +203,14 @@ BVIEW_STATUS system_utils_app_main (void)
     {
       return BVIEW_STATUS_FAILURE;
     }
+
+    /* Get number of ports */
+    if (BVIEW_STATUS_SUCCESS !=
+        sbapi_system_asic_num_ports_get (id,
+          &pswitchProp->asicInfo[id].numPorts))
+    {
+      return BVIEW_STATUS_FAILURE;
+    }
   }
 
   /* get the system UID */
@@ -270,6 +278,9 @@ BVIEW_STATUS system_utils_app_main (void)
       {
         continue;
       }
+      system_agent_port_get (&pswitchProp->agent_port);
+      sbapi_system_ip4_get((uint8_t *)&agent_ip.sin_addr, sizeof(agent_ip.sin_addr));
+      get_ip_str(&agent_ip, (char *)&pswitchProp->agent_ipaddr, BVIEW_IPADDR_LEN_MAX);
       rv = handler(&msg_data);
 
       reply_data.rv = rv;
