@@ -27,8 +27,10 @@
 #include "sbplugin_bst_ovsdb.h"
 #include "sbplugin_bst_cache.h"
 #include "ovsdb_bst_ctl.h"
+#include "common/platform_spec.h"
 
-
+BVIEW_BST_TRIGGER_CALLBACK_t   trigger_callback;
+void                           *trigger_cookie;
 
 /* Table to hold the different parameters of BID */ 
 BVIEW_BST_OVSDB_BID_PARAMS_t  bid_tab_params[SB_OVSDB_BST_STAT_ID_MAX_COUNT] = 
@@ -42,7 +44,8 @@ BVIEW_BST_OVSDB_BID_PARAMS_t  bid_tab_params[SB_OVSDB_BST_STAT_ID_MAX_COUNT] =
                                   .num_of_rows = SB_OVSDB_BST_DEVICE_ROWS,
                                   .num_of_columns = SB_OVSDB_BST_DEVICE_COLUMNS,
                                   .size = SB_OVSDB_BST_DEVICE_DB_SIZE,
-                                  .offset = offsetof (BVIEW_OVSDB_BST_STAT_DB_t, device)
+                                  .offset = offsetof (BVIEW_OVSDB_BST_STAT_DB_t, device),
+                                  .default_threshold = BVIEW_BST_DEVICE_THRES_DEFAULT
                                 },
                                 {
                                   .bid = SB_OVSDB_BST_STAT_ID_EGR_POOL, 
@@ -53,7 +56,8 @@ BVIEW_BST_OVSDB_BID_PARAMS_t  bid_tab_params[SB_OVSDB_BST_STAT_ID_MAX_COUNT] =
                                   .num_of_rows = SB_OVSDB_BST_EGR_POOL_ROWS,
                                   .num_of_columns = SB_OVSDB_BST_EGR_POOL_COLUMNS,
                                   .size = SB_OVSDB_E_SP_UM_SHARE_STAT_SIZE, 
-                                  .offset = offsetof (BVIEW_OVSDB_BST_STAT_DB_t, eSPumShare)
+                                  .offset = offsetof (BVIEW_OVSDB_BST_STAT_DB_t, eSPumShare),
+                                  .default_threshold = BVIEW_BST_E_SP_UCMC_THRES_DEFAULT
                                 },
                                 {
                                   .bid = SB_OVSDB_BST_STAT_ID_EGR_MCAST_POOL,
@@ -65,7 +69,8 @@ BVIEW_BST_OVSDB_BID_PARAMS_t  bid_tab_params[SB_OVSDB_BST_STAT_ID_MAX_COUNT] =
                                   .num_of_columns = SB_OVSDB_BST_EGR_MCAST_POOL_COLUMNS,
 
                                   .size = SB_OVSDB_E_SP_MC_SHARE_STAT_SIZE,
-                                  .offset = offsetof (BVIEW_OVSDB_BST_STAT_DB_t, eSPmcShare)
+                                  .offset = offsetof (BVIEW_OVSDB_BST_STAT_DB_t, eSPmcShare),
+                                  .default_threshold = BVIEW_BST_E_SP_MC_THRES_DEFAULT
                                 },
                                 {
                                   .bid = SB_OVSDB_BST_STAT_ID_ING_POOL, 
@@ -76,7 +81,8 @@ BVIEW_BST_OVSDB_BID_PARAMS_t  bid_tab_params[SB_OVSDB_BST_STAT_ID_MAX_COUNT] =
                                   .num_of_rows = SB_OVSDB_BST_ING_POOL_ROWS,
                                   .num_of_columns = SB_OVSDB_BST_ING_POOL_COLUMNS,
                                   .size = SB_OVSDB_I_SP_STAT_SIZE,
-                                  .offset = offsetof (BVIEW_OVSDB_BST_STAT_DB_t, iSP)
+                                  .offset = offsetof (BVIEW_OVSDB_BST_STAT_DB_t, iSP),
+                                  .default_threshold = BVIEW_BST_I_SP_UCMC_SHARED_THRES_DEFAULT
                                 },
                                 {
                                   .bid = SB_OVSDB_BST_STAT_ID_PORT_POOL,
@@ -87,7 +93,8 @@ BVIEW_BST_OVSDB_BID_PARAMS_t  bid_tab_params[SB_OVSDB_BST_STAT_ID_MAX_COUNT] =
                                   .num_of_rows = SB_OVSDB_BST_PORT_POOL_ROWS,
                                   .num_of_columns = SB_OVSDB_BST_PORT_POOL_COLUMNS,
                                   .size = SB_OVSDB_I_P_SP_STAT_SIZE,
-                                  .offset = offsetof (BVIEW_OVSDB_BST_STAT_DB_t, iPortSP)
+                                  .offset = offsetof (BVIEW_OVSDB_BST_STAT_DB_t, iPortSP),
+                                  .default_threshold =  BVIEW_BST_I_P_SP_UCMC_SHARED_THRES_DEFAULT
                                 },
                                 {
                                   .bid = SB_OVSDB_BST_STAT_ID_PRI_GROUP_SHARED,
@@ -98,7 +105,8 @@ BVIEW_BST_OVSDB_BID_PARAMS_t  bid_tab_params[SB_OVSDB_BST_STAT_ID_MAX_COUNT] =
                                   .num_of_rows = SB_OVSDB_BST_PRI_GROUP_SHARED_ROWS,
                                   .num_of_columns = SB_OVSDB_BST_PRI_GROUP_SHARED_COLUMNS,
                                   .size = SB_OVSDB_PG_SHARED_SIZE,
-                                  .offset = offsetof (BVIEW_OVSDB_BST_STAT_DB_t, iPGShared)
+                                  .offset = offsetof (BVIEW_OVSDB_BST_STAT_DB_t, iPGShared),
+                                  .default_threshold = BVIEW_BST_I_P_PG_UCMC_SHARED_THRES_DEFAULT
                                 },
                                 {
                                   .bid = SB_OVSDB_BST_STAT_ID_PRI_GROUP_HEADROOM,
@@ -109,7 +117,8 @@ BVIEW_BST_OVSDB_BID_PARAMS_t  bid_tab_params[SB_OVSDB_BST_STAT_ID_MAX_COUNT] =
                                   .num_of_rows = SB_OVSDB_BST_PRI_GROUP_HEADROOM_ROWS,
                                   .num_of_columns = SB_OVSDB_BST_PRI_GROUP_HEADROOM_COLUMNS,
                                   .size = SB_OVSDB_PG_HEADROOM_SIZE,
-                                  .offset = offsetof (BVIEW_OVSDB_BST_STAT_DB_t, iPGHeadroom)
+                                  .offset = offsetof (BVIEW_OVSDB_BST_STAT_DB_t, iPGHeadroom),
+                                  .default_threshold = BVIEW_BST_I_P_PG_UCMC_HDRM_THRES_DEFAULT
                                 },
                                 {
                                   .bid = SB_OVSDB_BST_STAT_ID_UCAST, 
@@ -120,7 +129,8 @@ BVIEW_BST_OVSDB_BID_PARAMS_t  bid_tab_params[SB_OVSDB_BST_STAT_ID_MAX_COUNT] =
                                   .num_of_rows = SB_OVSDB_BST_UCAST_ROWS,
                                   .num_of_columns = SB_OVSDB_BST_UCAST_COLUMNS,
                                   .size = SB_OVSDB_E_UC_STAT_SIZE,
-                                  .offset = offsetof (BVIEW_OVSDB_BST_STAT_DB_t, ucQ)
+                                  .offset = offsetof (BVIEW_OVSDB_BST_STAT_DB_t, ucQ),
+                                  .default_threshold = BVIEW_BST_UCAST_THRES_DEFAULT
                                 },
                                 {
                                   .bid = SB_OVSDB_BST_STAT_ID_MCAST, 
@@ -131,7 +141,8 @@ BVIEW_BST_OVSDB_BID_PARAMS_t  bid_tab_params[SB_OVSDB_BST_STAT_ID_MAX_COUNT] =
                                   .num_of_rows = SB_OVSDB_BST_MCAST_ROWS,
                                   .num_of_columns = SB_OVSDB_BST_MCAST_COLUMNS,
                                   .size = SB_OVSDB_E_MC_STAT_SIZE,
-                                  .offset = offsetof (BVIEW_OVSDB_BST_STAT_DB_t, mcQ)
+                                  .offset = offsetof (BVIEW_OVSDB_BST_STAT_DB_t, mcQ),
+                                  .default_threshold = BVIEW_BST_MCAST_THRES_DEFAULT
                                 },
                                 {
                                   .bid = SB_OVSDB_BST_STAT_ID_EGR_UCAST_PORT_SHARED,
@@ -142,7 +153,8 @@ BVIEW_BST_OVSDB_BID_PARAMS_t  bid_tab_params[SB_OVSDB_BST_STAT_ID_MAX_COUNT] =
                                   .num_of_rows = SB_OVSDB_BST_EGR_UCAST_PORT_SHARED_ROWS,
                                   .num_of_columns = SB_OVSDB_BST_EGR_UCAST_PORT_SHARED_COLUMNS,
                                   .size = SB_OVSDB_E_P_SP_UC_SHARE_STAT_SIZE,
-                                  .offset = offsetof (BVIEW_OVSDB_BST_STAT_DB_t, ePortSPucShare)
+                                  .offset = offsetof (BVIEW_OVSDB_BST_STAT_DB_t, ePortSPucShare),
+                                  .default_threshold = BVIEW_BST_E_P_SP_UC_THRES_DEFAULT
                                 },
                                 {
                                   .bid = SB_OVSDB_BST_STAT_ID_EGR_PORT_SHARED,
@@ -153,7 +165,8 @@ BVIEW_BST_OVSDB_BID_PARAMS_t  bid_tab_params[SB_OVSDB_BST_STAT_ID_MAX_COUNT] =
                                   .num_of_rows = SB_OVSDB_BST_EGR_PORT_SHARED_ROWS,
                                   .num_of_columns = SB_OVSDB_BST_EGR_PORT_SHARED_COLUMNS,
                                   .size = SB_OVSDB_E_P_SP_UM_SHARE_STAT_SIZE,
-                                  .offset = offsetof (BVIEW_OVSDB_BST_STAT_DB_t, ePortSPumShare)
+                                  .offset = offsetof (BVIEW_OVSDB_BST_STAT_DB_t, ePortSPumShare),
+                                  .default_threshold = BVIEW_BST_E_P_SP_UCMC_THRES_DEFAULT
                                 },
                                 {
                                   .bid = SB_OVSDB_BST_STAT_ID_RQE_QUEUE,
@@ -164,7 +177,8 @@ BVIEW_BST_OVSDB_BID_PARAMS_t  bid_tab_params[SB_OVSDB_BST_STAT_ID_MAX_COUNT] =
                                   .num_of_rows = SB_OVSDB_BST_RQE_QUEUE_ROWS,
                                   .num_of_columns = SB_OVSDB_BST_RQE_QUEUE_COLUMNS,
                                   .size = SB_OVSDB_E_RQE_QUEUE_STAT_SIZE,
-                                  .offset = offsetof (BVIEW_OVSDB_BST_STAT_DB_t, rqe)
+                                  .offset = offsetof (BVIEW_OVSDB_BST_STAT_DB_t, rqe),
+                                  .default_threshold = BVIEW_BST_E_RQE_THRES_DEFAULT
                                 },
                                 {
                                   .bid = SB_OVSDB_BST_STAT_ID_RQE_POOL,
@@ -175,7 +189,8 @@ BVIEW_BST_OVSDB_BID_PARAMS_t  bid_tab_params[SB_OVSDB_BST_STAT_ID_MAX_COUNT] =
                                   .num_of_rows = SB_OVSDB_BST_RQE_POOL_ROWS,
                                   .num_of_columns = SB_OVSDB_BST_RQE_POOL_COLUMNS,
                                   .size = SB_OVSDB_E_RQE_STAT_SIZE,
-                                  .offset = offsetof (BVIEW_OVSDB_BST_STAT_DB_t, rqeQueueEntries)
+                                  .offset = offsetof (BVIEW_OVSDB_BST_STAT_DB_t, rqeQueueEntries),
+                                  .default_threshold = BVIEW_BST_E_RQE_THRES_DEFAULT
                                 },
                                 {
                                   .bid = SB_OVSDB_BST_STAT_ID_UCAST_GROUP,
@@ -186,7 +201,8 @@ BVIEW_BST_OVSDB_BID_PARAMS_t  bid_tab_params[SB_OVSDB_BST_STAT_ID_MAX_COUNT] =
                                   .num_of_rows = SB_OVSDB_BST_UCAST_GROUP_ROWS,
                                   .num_of_columns = SB_OVSDB_BST_UCAST_GROUP_COLUMNS,
                                   .size = SB_OVSBD_E_UC_Q_GROUP_STAT_SIZE,
-                                  .offset = offsetof (BVIEW_OVSDB_BST_STAT_DB_t, eUCqGroup)
+                                  .offset = offsetof (BVIEW_OVSDB_BST_STAT_DB_t, eUCqGroup),
+                                  .default_threshold = BVIEW_BST_UCAST_QUEUE_GROUP_DEFAULT
                                 },
                                 {
                                   .bid = SB_OVSDB_BST_STAT_ID_CPU_QUEUE, 
@@ -197,7 +213,8 @@ BVIEW_BST_OVSDB_BID_PARAMS_t  bid_tab_params[SB_OVSDB_BST_STAT_ID_MAX_COUNT] =
                                   .num_of_rows = SB_OVSDB_BST_CPU_QUEUE_ROWS,
                                   .num_of_columns = SB_OVSDB_BST_CPU_QUEUE_COLUMNS,
                                   .size = SB_OVSDB_E_CPU_STAT_SIZE,
-                                  .offset = offsetof (BVIEW_OVSDB_BST_STAT_DB_t, eCPU)
+                                  .offset = offsetof (BVIEW_OVSDB_BST_STAT_DB_t, eCPU),
+                                  .default_threshold = BVIEW_BST_E_CPU_UCMC_THRES_DEFAULT
                                 },
                               };         
 
@@ -490,6 +507,7 @@ BVIEW_STATUS bst_ovsdb_bst_config_set(int asic,
                                       BVIEW_OVSDB_CONFIG_DATA_t *config)
 {
   BVIEW_STATUS rv = BVIEW_STATUS_SUCCESS;
+  BVIEW_OVSDB_BST_DATA_t   *p_cache = NULL;
    
   rv = bst_ovsdb_bst_config_commit (asic, config);
   if (rv != BVIEW_STATUS_SUCCESS)
@@ -497,9 +515,137 @@ BVIEW_STATUS bst_ovsdb_bst_config_set(int asic,
     SB_OVSDB_DEBUG_PRINT ("Failed to commit bst mode\n");
     return rv;
   }
+  
+  if (config->trackInit != true)
+  {
+    rv = bst_ovsdb_bst_tracking_commit (asic, config);
+    if (rv != BVIEW_STATUS_SUCCESS)
+    {
+      SB_OVSDB_DEBUG_PRINT ("Failed to commit Tracking\n");
+      return rv;
+    }
+
+    p_cache = bst_ovsdb_cache_get();
+    if (!p_cache)
+    {
+      return BVIEW_STATUS_FAILURE;
+    }
+    p_cache->config_data.trackingMask =  
+            config->trackingMask;
+  }
   return rv;
 }
 
+/*********************************************************************
+* @brief  Restore threshold configuration
+*
+* @param   asic                                    - unit
+*
+* @retval BVIEW_STATUS_INVALID_PARAMETER if input data is invalid.
+* @retval BVIEW_STATUS_FAILURE           if restore is succes.
+* @retval BVIEW_STATUS_SUCCESS           if restore set is failed.
+*
+* @notes    none
+*
+*
+*********************************************************************/
+BVIEW_STATUS  bst_ovsdb_clear_thresholds  (int asic)
+{
+  return bst_ovsdb_clear_thresholds_commit (asic);
+}
+
+/*********************************************************************
+* @brief  Restore threshold configuration
+*
+* @param   asic                                    - unit
+* @param   name                                    - Row Name
+*
+* @retval BVIEW_STATUS_INVALID_PARAMETER if input data is invalid.
+* @retval BVIEW_STATUS_FAILURE           if restore is succes.
+* @retval BVIEW_STATUS_SUCCESS           if restore set is failed.
+*
+* @notes    none
+*
+*
+*********************************************************************/
+BVIEW_STATUS  bst_ovsdb_trigger_callback (int asic,
+                                          int bid,
+                                          int port,
+                                          int queue)
+{
+  BVIEW_BST_TRIGGER_INFO_t  triggerInfo;
+
+  sprintf (triggerInfo.realm, "%s",bid_tab_params[bid].realm_name);
+  sprintf (triggerInfo.counter, "%s", bid_tab_params[bid].counter_name);
+  triggerInfo.port = port;
+  triggerInfo.queue = queue;  
+  
+  trigger_callback (asic, trigger_cookie, &triggerInfo);
+  return BVIEW_STATUS_SUCCESS;
+}
+
+/*********************************************************************
+* @brief  Register hw trigger callback
+*
+* @param   asic                              - unit
+* @param   callback                          - function to be called
+*                                              when trigger happens
+* @param   cookie                            - user data
+*
+* @retval BVIEW_STATUS_INVALID_PARAMETER if input data is invalid.
+* @retval BVIEW_STATUS_FAILURE           if restore is succes.
+* @retval BVIEW_STATUS_SUCCESS           if restore set is failed.
+*
+* @notes    callback will be executed in driver thread so post the data
+*           to respective task.
+*
+*********************************************************************/
+BVIEW_STATUS  bst_ovsdb_bst_register_trigger (int asic,
+                                        BVIEW_BST_TRIGGER_CALLBACK_t callback,
+                                        void *cookie)
+{
+  trigger_callback = callback;
+  trigger_cookie = cookie;
+  return BVIEW_STATUS_SUCCESS;
+}
+
+/*********************************************************************
+* @brief  Clear stats
+*
+* @param[in]   asic                                    - unit
+*
+* @retval BVIEW_STATUS_INVALID_PARAMETER if input data is invalid.
+* @retval BVIEW_STATUS_FAILURE           if clear stats is succes.
+* @retval BVIEW_STATUS_SUCCESS           if clear stats is failed.
+*
+* @notes    none
+*
+*
+*********************************************************************/
+BVIEW_STATUS  bst_ovsdb_clear_stats(int asic)
+{
+  return bst_ovsdb_clear_stats_commit (asic);
+}
+
+/*********************************************************************
+* @brief  Clear stats
+*
+* @param[in]  bid                            - BID
+* @param[out] threshold                     - default threshold     
+*
+* @retval BVIEW_STATUS_INVALID_PARAMETER if input data is invalid.
+* @retval BVIEW_STATUS_SUCCESS           if clear stats is failed.
+*
+* @notes    none
+*
+*
+*********************************************************************/
+BVIEW_STATUS bst_ovsdb_default_threshold_get (int bid,
+                                              uint64_t *threshold)
+{
+  *threshold = bid_tab_params[bid].default_threshold;
+  return BVIEW_STATUS_SUCCESS;
+}
 
 
 /*********************************************************************

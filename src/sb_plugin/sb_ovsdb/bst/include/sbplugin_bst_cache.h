@@ -35,6 +35,7 @@ typedef struct _bst_ovsdb_bid_info_
 {
   uint64_t  stat;      /* buffer usage of a particular BID */
   uint64_t  threshold; /* Threshold configured */
+  bool      enabled;   /* Row is enabled  */
 } BVIEW_OVSDB_BID_INFO_t;
 
 typedef struct _bst_ovsdb_stat_db_
@@ -67,6 +68,11 @@ typedef struct _bst_ovsdb_config_data_
   int  bst_tracking_mode;   /* BST tracking mode */
   bool periodic_collection; /* Periodic collections of stats */
   int  collection_interval;  /* Periodic collection interval */
+  int  bstMaxTriggers;
+  bool sendSnapshotOnTrigger;
+  bool triggerCollectionEnabled;
+  int  trackingMask;
+  bool trackInit;
 } BVIEW_OVSDB_CONFIG_DATA_t;
 
 
@@ -158,26 +164,49 @@ BVIEW_OVSDB_BST_DATA_t  *bst_ovsdb_cache_get ();
 *
 * @notes    none
 *********************************************************************/
-BVIEW_STATUS bst_ovsdb_cache_row_get (int asic, char *ovsdb_key,
+BVIEW_STATUS bst_ovsdb_cache_row_get (int asic, int bid, int index1,
+                                      int index2,
                                       BVIEW_OVSDB_BID_INFO_t **p_row);
 
 /*********************************************************************
-* @brief    Update the stat/threshold of row with key 'ovsdb_key'. 
-*           
+* @brief    Update the stat/threshold of row with key 'ovsdb_key'.
 *
-* @param[in]   asic      -  asic number   
-* @param[in]   ovsdb_key -  ovsdb bufmon table's name/key entry     
-* @param[out]  p_row     -  Pointer to the row    
+*
+* @param[in]   asic      -  asic number
+* @param[in]   ovsdb_key -  ovsdb bufmon table's name/key entry
+* @param[out]  p_row     -  Pointer to the row
 *
 * @retval BVIEW_STATUS_FAILURE      Failed to get the row for ovsdb_key.
-* @retval BVIEW_STATUS_SUCCESS      updated cache successfully. 
-*                                   
+* @retval BVIEW_STATUS_SUCCESS      updated cache successfully.
+*
 *
 *
 * @notes    none
 *********************************************************************/
-BVIEW_STATUS    bst_ovsdb_row_update (int asic, char *ovsdb_key,
-                                      BVIEW_OVSDB_BID_INFO_t *prow);
+BVIEW_STATUS    bst_ovsdb_row_update (int asic,  int bid,
+                                      int port,  int queue,
+                                      bool default_threshold,
+                                      BVIEW_OVSDB_BID_INFO_t *p_row);
+
+/*********************************************************************
+* @brief    Get row from ovsdb-key  <realm>/<name>/<index1>/<index2>
+*
+*
+* @param[in]   asic      -  asic number
+* @param[in]   ovsdb_key -  ovsdb bufmon table's name/key entry
+* @param[out]  p_row     -  Pointer to the row
+
+*
+* @retval BVIEW_STATUS_FAILURE      Failed to get row from ovsdb key
+* @retval BVIEW_STATUS_SUCCESS
+*
+*
+*
+* @notes    none
+*********************************************************************/
+BVIEW_STATUS bst_ovsdb_row_info_get (int asic, char *ovsdb_key,
+                                     int *pbid, int *port,
+                                     int *queue);
 
 /*********************************************************************
 * @brief   Dumps BST ovsdb cache. 

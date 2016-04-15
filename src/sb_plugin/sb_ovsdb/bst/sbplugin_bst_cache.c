@@ -93,6 +93,8 @@ BVIEW_STATUS bst_ovsdb_cache_bst_config_set(int asic,
   bst_ovsdb_cache.config_data.bst_tracking_mode = config->bst_tracking_mode;
   bst_ovsdb_cache.config_data.periodic_collection = config->periodic_collection;  
   bst_ovsdb_cache.config_data.collection_interval = config->collection_interval;
+  bst_ovsdb_cache.config_data.bstMaxTriggers = config->bstMaxTriggers;
+  bst_ovsdb_cache.config_data.sendSnapshotOnTrigger = config->sendSnapshotOnTrigger;
   /* Release lock */
   SB_OVSDB_RWLOCK_UNLOCK(bst_ovsdb_cache.lock);
   return BVIEW_STATUS_SUCCESS;
@@ -126,6 +128,9 @@ BVIEW_STATUS bst_ovsdb_cache_bst_config_get(int asic,
   config->bst_tracking_mode = bst_ovsdb_cache.config_data.bst_tracking_mode;
   config->periodic_collection  = bst_ovsdb_cache.config_data.periodic_collection;
   config->collection_interval  = bst_ovsdb_cache.config_data.collection_interval;
+  config->bstMaxTriggers  = bst_ovsdb_cache.config_data.bstMaxTriggers;
+  config->sendSnapshotOnTrigger  = bst_ovsdb_cache.config_data.sendSnapshotOnTrigger;
+  config->trackingMask         = bst_ovsdb_cache.config_data.trackingMask;
 
   /* Release lock */
   SB_OVSDB_RWLOCK_UNLOCK(bst_ovsdb_cache.lock);
@@ -148,8 +153,66 @@ BVIEW_STATUS bst_ovsdb_cache_bst_config_get(int asic,
 *
 * @notes    none
 *********************************************************************/
-BVIEW_STATUS bst_ovsdb_cache_row_get (int asic, char *ovsdb_key,
+BVIEW_STATUS bst_ovsdb_cache_row_get (int asic, int bid, int index1,
+                                      int index2,
                                       BVIEW_OVSDB_BID_INFO_t **p_row)
+{
+  int index =0;
+  BVIEW_OVSDB_BID_INFO_t   *p_base = NULL;
+
+  /* Check for NULL pointer */
+  SB_OVSDB_NULLPTR_CHECK(p_row, BVIEW_STATUS_INVALID_PARAMETER);
+
+  /* If it is double indexed then port is @first index */
+  if (bid_tab_params[bid].is_double_indexed == true)
+  {
+    index = (((index1) -1) * bid_tab_params[bid].num_of_columns) + ((index2)-1);
+  }
+  else
+  {
+    /* Device */
+    if (bid_tab_params[bid].is_indexed == false)
+    {
+      index = 0;
+    }
+    else
+    {
+      index = index1;
+    }
+  }
+
+  /* Validate the index */
+  if (index >= bid_tab_params[bid].size)
+  {
+    return BVIEW_STATUS_FAILURE;
+  }
+
+  p_base = BVIEW_OVSDB_BID_BASE_ADDR (bid, &bst_ovsdb_cache.cache[asic]);
+  /* Get pointer to the entry */
+  *p_row =  p_base + index;
+
+  return BVIEW_STATUS_SUCCESS;
+}
+
+/*********************************************************************
+* @brief    Get row from ovsdb-key  <realm>/<name>/<index1>/<index2>
+*
+*
+* @param[in]   asic      -  asic number
+* @param[in]   ovsdb_key -  ovsdb bufmon table's name/key entry
+* @param[out]  p_row     -  Pointer to the row
+
+*
+* @retval BVIEW_STATUS_FAILURE      Failed to get row from ovsdb key
+* @retval BVIEW_STATUS_SUCCESS
+*
+*
+*
+* @notes    none
+*********************************************************************/
+BVIEW_STATUS bst_ovsdb_row_info_get (int asic, char *ovsdb_key,
+                                     int *pbid, int *port, 
+                                     int *queue)
 {
   char src_string[1024] = {0};
   char delim[2] = "/";
@@ -161,10 +224,11 @@ BVIEW_STATUS bst_ovsdb_cache_row_get (int asic, char *ovsdb_key,
   int num_of_entries = sizeof(bid_tab_params)/sizeof(BVIEW_BST_OVSDB_BID_PARAMS_t);
   int  bid = 0;
   int index =0;
-  BVIEW_OVSDB_BID_INFO_t   *p_base = NULL;
 
-  /* Check for NULL pointer */
-  SB_OVSDB_NULLPTR_CHECK(p_row, BVIEW_STATUS_INVALID_PARAMETER);
+  SB_OVSDB_NULLPTR_CHECK(ovsdb_key, BVIEW_STATUS_INVALID_PARAMETER);
+  SB_OVSDB_NULLPTR_CHECK(pbid, BVIEW_STATUS_INVALID_PARAMETER);
+  SB_OVSDB_NULLPTR_CHECK(port, BVIEW_STATUS_INVALID_PARAMETER);
+  SB_OVSDB_NULLPTR_CHECK(queue, BVIEW_STATUS_INVALID_PARAMETER);
 
   strcpy(src_string, ovsdb_key);
 
@@ -179,6 +243,12 @@ BVIEW_STATUS bst_ovsdb_cache_row_get (int asic, char *ovsdb_key,
   index2 = strtok(NULL, delim);
   if (realm == NULL || name == NULL ||
       index1 == NULL || index2 == NULL)
+  {
+    return BVIEW_STATUS_FAILURE;
+  }
+
+  final_token = strtok(NULL, delim);
+  if (final_token != NULL)
   {
     return BVIEW_STATUS_FAILURE;
   }
@@ -230,13 +300,12 @@ BVIEW_STATUS bst_ovsdb_cache_row_get (int asic, char *ovsdb_key,
     return BVIEW_STATUS_FAILURE;
   }
 
-  p_base = BVIEW_OVSDB_BID_BASE_ADDR (bid, &bst_ovsdb_cache.cache[asic]);
-  /* Get pointer to the entry */
-  *p_row =  p_base + index;
-
+  *pbid = bid;
+  *port = atoi(index1);
+  *queue = atoi(index2);
   return BVIEW_STATUS_SUCCESS;
 }
-
+ 
 /*********************************************************************
 * @brief    Update the stat/threshold of row with key 'ovsdb_key'. 
 *           
@@ -252,7 +321,9 @@ BVIEW_STATUS bst_ovsdb_cache_row_get (int asic, char *ovsdb_key,
 *
 * @notes    none
 *********************************************************************/
-BVIEW_STATUS    bst_ovsdb_row_update (int asic, char *ovsdb_key,
+BVIEW_STATUS    bst_ovsdb_row_update (int asic,  int bid,
+                                      int port,  int queue,
+                                      bool default_threshold,
                                       BVIEW_OVSDB_BID_INFO_t *p_row)
 {
   BVIEW_OVSDB_BID_INFO_t   *p_db_row = NULL;
@@ -260,15 +331,20 @@ BVIEW_STATUS    bst_ovsdb_row_update (int asic, char *ovsdb_key,
   SB_OVSDB_NULLPTR_CHECK (p_row, BVIEW_STATUS_INVALID_PARAMETER);
 
   /* Get exact row of ovsdb_key*/
-  if (BVIEW_STATUS_SUCCESS !=  bst_ovsdb_cache_row_get (asic, 
-                                                        ovsdb_key,
-                                                        &p_db_row))
+  if (BVIEW_STATUS_SUCCESS !=  
+       bst_ovsdb_cache_row_get (asic, 
+                                bid, port, queue,
+                                &p_db_row))
   {
     return BVIEW_STATUS_FAILURE;
   }
   /* Acquire write lock*/
   SB_OVSDB_RWLOCK_WR_LOCK(bst_ovsdb_cache.lock);
 
+  if (bid != -1)
+  {
+    bst_ovsdb_default_threshold_get (bid, &p_row->threshold);
+  }
   /* Update the cache*/
   if (p_db_row)
   {
