@@ -76,13 +76,19 @@ BVIEW_STATUS bst_type_api_get (int type, BVIEW_BST_API_HANDLER_t *handler)
     {BVIEW_BST_CMD_API_CLEAR_THRESHOLD, bst_clear_threshold_set},
     {BVIEW_BST_CMD_API_CLEAR_STATS, bst_clear_stats_set},
     {BVIEW_BST_CMD_API_CLEAR_TRIGGER_COUNT, bst_clear_trigger_count},
-    {BVIEW_BST_CMD_API_ENABLE_BST_ON_TRIGGER, bst_enable_on_trigger_timer_expiry}
+    {BVIEW_BST_CMD_API_ENABLE_BST_ON_TRIGGER, bst_enable_on_trigger_timer_expiry},
+    {BVIEW_BST_CMD_API_UPDATE_TRACK, bst_update_config_set},
+    {BVIEW_BST_CMD_API_UPDATE_FEATURE, bst_update_config_set}
   };
 
-  for (i = 0; i < BVIEW_BST_CMD_API_MAX-1; i++)
+  for (i = 0; i < (sizeof(bst_api_list)/sizeof(BVIEW_BST_API_t)); i++)
   {
     if (type == bst_api_list[i].bst_command)
     {
+     if (type == BVIEW_BST_CMD_API_UPDATE_TRACK)
+      {
+       printf(" %s, %d found handler fr track update\r\n", __func__, __LINE__);
+      }
       *handler = bst_api_list[i].handler;
       return BVIEW_STATUS_SUCCESS;
     }
@@ -333,6 +339,15 @@ BVIEW_STATUS bst_app_main (void)
       }
 
       rv = handler(&msg_data);
+      
+     if ((BVIEW_BST_CMD_API_UPDATE_TRACK == msg_data.msg_type)||
+         (BVIEW_BST_CMD_API_UPDATE_FEATURE == msg_data.msg_type))
+     {
+       /* no need to send any json response.
+         */
+      continue;
+     }
+      
 
       reply_data.rv = rv;
 
@@ -418,48 +433,217 @@ BVIEW_STATUS bst_app_config_init (unsigned int num_units)
       LOG_POST (BVIEW_LOG_ERROR, "Error!! bst memory is not accessible !!\r\n");
       return BVIEW_STATUS_FAILURE;
     }
-    bstjson_memory_init();
+    bstjson_memory_init(); 
+    memset(&bstMode, 0, sizeof(BVIEW_BST_CONFIG_t));
+    sbapi_bst_config_get(unit_id, &bstMode);
 
     /* bst enable */
+   if (bstMode.enableStatsMonitoring != BVIEW_BST_DEFAULT_ENABLE)
+   {
+    ptr->config.bstEnable = bstMode.enableStatsMonitoring;
+   }
+   else
+   {
     ptr->config.bstEnable = BVIEW_BST_DEFAULT_ENABLE;
+   }
+
     /* send async reports  */
+   if (bstMode.enablePeriodicCollection != BVIEW_BST_PERIODIC_REPORT_DEFAULT)
+   {
+     ptr->config.sendAsyncReports = bstMode.enablePeriodicCollection;
+   }
+   else
+   {
     ptr->config.sendAsyncReports = BVIEW_BST_PERIODIC_REPORT_DEFAULT;
+   }
+   
+
     /* collection interval  */
+   if (bstMode.collectionPeriod != BVIEW_BST_DEFAULT_INTERVAL)
+   {
+     ptr->config.collectionInterval = bstMode.collectionPeriod;
+   }
+  else
+   {
     ptr->config.collectionInterval = BVIEW_BST_DEFAULT_INTERVAL;
+   }
+
+    if (bstMode.bstMaxTriggers != BVIEW_BST_DEFAULT_MAX_TRIGGERS)
+    {
+     ptr->config.bstMaxTriggers = bstMode.bstMaxTriggers;
+    }
+    else
+    {
+      ptr->config.bstMaxTriggers = BVIEW_BST_DEFAULT_MAX_TRIGGERS;
+    }
+   
+    if (bstMode.sendSnapshotOnTrigger != BVIEW_BST_DEFAULT_SNAPSHOT_TRIGGER)
+    {
+     ptr->config.sendSnapshotOnTrigger = bstMode.sendSnapshotOnTrigger;
+    }
+    else
+    {
+      ptr->config.sendSnapshotOnTrigger = BVIEW_BST_DEFAULT_SNAPSHOT_TRIGGER;
+    }
+
     /* stats in cells or bytes.  */
     ptr->config.statUnitsInCells = BVIEW_BST_DEFAULT_STATS_UNITS;
     ptr->config.statsInPercentage = BVIEW_BST_DEFAULT_STATS_PERCENTAGE;
-    ptr->config.bstMaxTriggers = BVIEW_BST_DEFAULT_MAX_TRIGGERS;
-    ptr->config.sendSnapshotOnTrigger = BVIEW_BST_DEFAULT_SNAPSHOT_TRIGGER;
     ptr->config.triggerTransmitInterval = BVIEW_BST_DEFAULT_TRIGGER_INTERVAL;
     ptr->config.sendIncrementalReport = BVIEW_BST_DEFAULT_SEND_INCR_REPORT;
 
 
-    /* enable device tracking   */
     ptr->track.trackDevice = BVIEW_BST_DEFAULT_TRACK_DEVICE;
-    /* enable ingress tracking p + pg   */
     ptr->track.trackIngressPortPriorityGroup = BVIEW_BST_DEFAULT_TRACK_IN_P_PG;
-    /* enable ingress tracking p + sp  */
-    ptr->track.trackIngressPortServicePool = BVIEW_BST_DEFAULT_TRACK_IN_P_SP;
-    /* enable ingress tracking  sp  */
-    ptr->track.trackIngressServicePool = BVIEW_BST_DEFAULT_TRACK_IN_SP;
-    /* enable egress tracking P+ sp  */
-    ptr->track.trackEgressPortServicePool = BVIEW_BST_DEFAULT_TRACK_E_P_SP;
-    /* enable egress tracking sp  */
+     ptr->track.trackIngressPortServicePool = BVIEW_BST_DEFAULT_TRACK_IN_P_SP;
+     ptr->track.trackIngressServicePool = BVIEW_BST_DEFAULT_TRACK_IN_SP;
+     ptr->track.trackEgressPortServicePool = BVIEW_BST_DEFAULT_TRACK_E_P_SP;
     ptr->track.trackEgressServicePool = BVIEW_BST_DEFAULT_TRACK_E_SP;
-    /* enable egress tracking uc queues  */
-    ptr->track.trackEgressUcQueue = BVIEW_BST_DEFAULT_TRACK_E_UC_Q;
-    /* enable egress tracking uc queue grp */
-    ptr->track.trackEgressUcQueueGroup = BVIEW_BST_DEFAULT_TRACK_E_UC_QG;
-    /* enable egress tracking mc queue grp */
-    ptr->track.trackEgressMcQueue = BVIEW_BST_DEFAULT_TRACK_E_MC_Q;
-    /* enable egress tracking cpu queue grp */
-    ptr->track.trackEgressCpuQueue = BVIEW_BST_DEFAULT_TRACK_E_CPU_Q;
-    /* enable egress tracking rqe queue grp */
-    ptr->track.trackEgressRqeQueue = BVIEW_BST_DEFAULT_TRACK_MODE;
-    /* enable  tracking mode to current */
+     ptr->track.trackEgressUcQueue = BVIEW_BST_DEFAULT_TRACK_E_UC_Q;
+     ptr->track.trackEgressUcQueueGroup = BVIEW_BST_DEFAULT_TRACK_E_UC_QG;
+     ptr->track.trackEgressMcQueue = BVIEW_BST_DEFAULT_TRACK_E_MC_Q;
+     ptr->track.trackEgressMcQueue = BVIEW_BST_DEFAULT_TRACK_E_MC_Q;
+     ptr->track.trackEgressCpuQueue = BVIEW_BST_DEFAULT_TRACK_E_CPU_Q;
+     ptr->track.trackEgressRqeQueue = BVIEW_BST_DEFAULT_TRACK_E_RQE_Q;
 
-    ptr->track.trackPeakStats = false;
+    ptr->track.trackDevice = bstMode.trackDevice;
+    ptr->track.trackIngressPortPriorityGroup = bstMode.trackIngressPortPriorityGroup;
+     ptr->track.trackIngressPortServicePool = bstMode.trackIngressPortServicePool;
+     ptr->track.trackIngressServicePool = bstMode.trackIngressServicePool;
+     ptr->track.trackEgressPortServicePool = bstMode.trackEgressPortServicePool;
+     ptr->track.trackEgressServicePool = bstMode.trackEgressServicePool;
+     ptr->track.trackEgressUcQueue = bstMode.trackEgressUcQueue;
+     ptr->track.trackEgressUcQueueGroup = bstMode.trackEgressUcQueueGroup;
+     ptr->track.trackEgressMcQueue = bstMode.trackEgressMcQueue;
+     ptr->track.trackEgressCpuQueue = bstMode.trackEgressCpuQueue;
+     ptr->track.trackEgressRqeQueue = bstMode.trackEgressRqeQueue;
+#if 0
+   /* enable device tracking   */
+   if(bstMode.trackDevice != BVIEW_BST_DEFAULT_TRACK_DEVICE)
+   {
+    ptr->track.trackDevice = bstMode.trackDevice;
+   }
+   else
+   {
+    ptr->track.trackDevice = BVIEW_BST_DEFAULT_TRACK_DEVICE;
+   }
+    /* enable ingress tracking p + pg   */
+   if (bstMode.trackIngressPortPriorityGroup != BVIEW_BST_DEFAULT_TRACK_IN_P_PG)
+   {
+     ptr->track.trackIngressPortPriorityGroup = bstMode.trackIngressPortPriorityGroup;
+   }
+   else
+   {
+    ptr->track.trackIngressPortPriorityGroup = BVIEW_BST_DEFAULT_TRACK_IN_P_PG;
+   }
+    /* enable ingress tracking p + sp  */
+   if (bstMode.trackIngressPortServicePool != BVIEW_BST_DEFAULT_TRACK_IN_P_SP)
+   {
+     ptr->track.trackIngressPortServicePool = bstMode.trackIngressPortServicePool;
+   }
+   else
+   {
+     ptr->track.trackIngressPortServicePool = BVIEW_BST_DEFAULT_TRACK_IN_P_SP;
+   }
+    /* enable ingress tracking  sp  */
+   if (bstMode.trackIngressServicePool != BVIEW_BST_DEFAULT_TRACK_IN_SP)
+   {
+     ptr->track.trackIngressServicePool = bstMode.trackIngressServicePool;
+   }
+   else
+   {
+     ptr->track.trackIngressServicePool = BVIEW_BST_DEFAULT_TRACK_IN_SP;
+   }
+    /* enable egress tracking P+ sp  */
+
+   if (bstMode.trackEgressPortServicePool != BVIEW_BST_DEFAULT_TRACK_E_P_SP)
+   {
+     ptr->track.trackEgressPortServicePool = bstMode.trackEgressPortServicePool;
+   }
+   else
+   {
+     ptr->track.trackEgressPortServicePool = BVIEW_BST_DEFAULT_TRACK_E_P_SP;
+   }
+    /* enable egress tracking sp  */
+   if(bstMode.trackEgressServicePool != BVIEW_BST_DEFAULT_TRACK_E_SP)
+   {
+     ptr->track.trackEgressServicePool = bstMode.trackEgressServicePool;
+   }
+   else
+   {
+    ptr->track.trackEgressServicePool = BVIEW_BST_DEFAULT_TRACK_E_SP;
+   }
+
+    /* enable egress tracking uc queues  */
+   if (bstMode.trackEgressUcQueue != BVIEW_BST_DEFAULT_TRACK_E_UC_Q)
+   {
+     ptr->track.trackEgressUcQueue = bstMode.trackEgressUcQueue;
+   }
+   else
+   {
+     ptr->track.trackEgressUcQueue = BVIEW_BST_DEFAULT_TRACK_E_UC_Q;
+   }
+    /* enable egress tracking uc queue grp */
+   if (bstMode.trackEgressUcQueueGroup != BVIEW_BST_DEFAULT_TRACK_E_UC_QG)
+   {
+     ptr->track.trackEgressUcQueueGroup = bstMode.trackEgressUcQueueGroup;
+   }
+   else
+   {
+     ptr->track.trackEgressUcQueueGroup = BVIEW_BST_DEFAULT_TRACK_E_UC_QG;
+   }
+    /* enable egress tracking mc queue grp */
+   if (bstMode.trackEgressMcQueue != BVIEW_BST_DEFAULT_TRACK_E_MC_Q)
+   {
+     ptr->track.trackEgressMcQueue = bstMode.trackEgressMcQueue;
+   }
+   else
+   {
+     ptr->track.trackEgressMcQueue = BVIEW_BST_DEFAULT_TRACK_E_MC_Q;
+   }
+    /* enable egress tracking cpu queue grp */
+   if (bstMode.trackEgressCpuQueue != BVIEW_BST_DEFAULT_TRACK_E_CPU_Q)
+   {
+     ptr->track.trackEgressCpuQueue = bstMode.trackEgressCpuQueue;
+   }
+   else
+   {
+     ptr->track.trackEgressCpuQueue = BVIEW_BST_DEFAULT_TRACK_E_CPU_Q;
+   }
+    /* enable egress tracking rqe queue grp */
+
+   if (bstMode.trackEgressRqeQueue != BVIEW_BST_DEFAULT_TRACK_MODE)
+   {
+     ptr->track.trackEgressRqeQueue = bstMode.trackEgressRqeQueue;
+   }
+   else
+   {
+     ptr->track.trackEgressRqeQueue = BVIEW_BST_DEFAULT_TRACK_MODE;
+   }
+#endif
+    if (bstMode.mode != BVIEW_BST_DEFAULT_TRACK_MODE)
+    {
+      if (BVIEW_BST_DEFAULT_TRACK_MODE == BVIEW_BST_MODE_CURRENT)
+      {
+        ptr->track.trackPeakStats = true;
+      }
+      else
+      {
+       ptr->track.trackPeakStats = false;
+      }
+    }
+    else
+    {
+      if (BVIEW_BST_DEFAULT_TRACK_MODE == BVIEW_BST_MODE_CURRENT)
+      {
+        ptr->track.trackPeakStats = true;
+      }
+      else
+      {
+       ptr->track.trackPeakStats = false;
+      }
+    }
+
 
     /* Initialize the bst timer array */
     bst_data_ptr->bst_collection_timer.unit = unit_id;
@@ -468,7 +652,7 @@ BVIEW_STATUS bst_app_config_init (unsigned int num_units)
     bst_data_ptr->bst_trigger_timer.unit = unit_id;
 
     /* push default values to asic */
-
+#if 0
     rv =  sbapi_bst_clear_thresholds(unit_id);
     if (BVIEW_STATUS_SUCCESS != rv)
     {
@@ -476,13 +660,26 @@ BVIEW_STATUS bst_app_config_init (unsigned int num_units)
           "threshold clear not successful for the unit. %d \r\n", 
           unit_id);
     }
-    memset (&bstMode, 0, sizeof (BVIEW_BST_CONFIG_t));
-    bstMode.enableStatsMonitoring = BVIEW_BST_DEFAULT_ENABLE;
+#endif
+    bstMode.trackInit = true;
+    bstMode.enableStatsMonitoring = ptr->config.bstEnable;
     bstMode.enableDeviceStatsMonitoring = BVIEW_BST_DEFAULT_TRACK_DEVICE;
     bstMode.enableIngressStatsMonitoring = BVIEW_BST_DEFAULT_TRACK_INGRESS;
     bstMode.enableEgressStatsMonitoring = BVIEW_BST_DEFAULT_TRACK_EGRESS;
-    bstMode.mode = BVIEW_BST_MODE_CURRENT;
-  
+    if(true == ptr->track.trackPeakStats)
+    {
+      bstMode.mode = BVIEW_BST_MODE_PEAK;
+    }
+    else
+    {
+      bstMode.mode = BVIEW_BST_MODE_CURRENT;
+    }
+
+  bstMode.statUnitsInCells = ptr->config.statUnitsInCells;
+  bstMode.statsInPercentage = ptr->config.statsInPercentage;
+  bstMode.triggerTransmitInterval = ptr->config.triggerTransmitInterval;
+  bstMode.sendIncrementalReport = ptr->config.sendIncrementalReport;
+ 
     if (BVIEW_STATUS_SUCCESS != sbapi_bst_config_set (unit_id, &bstMode))
     {
       LOG_POST (BVIEW_LOG_ERROR,
@@ -1073,6 +1270,7 @@ BVIEW_STATUS bst_main ()
             sizeof (BVIEW_BST_REPORT_SNAPSHOT_t));
   }
 
+    bstjson_memory_init();
   LOG_POST (BVIEW_LOG_INFO,
               "bst application: bst memory allocated successfully\r\n");
 
@@ -1274,3 +1472,25 @@ void bst_set_realm_to_collect(char *realm, BVIEW_BST_REPORT_OPTIONS_t *options)
   return;
 }
 
+BVIEW_STATUS bst_plugin_cb(void *request)
+{
+  BVIEW_BST_REQUEST_MSG_t msg_data;
+  BVIEW_STATUS rv= BVIEW_STATUS_SUCCESS;
+  if (NULL == request)
+  {
+   return BVIEW_STATUS_FAILURE;
+  }
+
+  memcpy(&msg_data, request, sizeof(BVIEW_BST_REQUEST_MSG_t));
+
+  /* Send the message to the bst application */
+  rv = bst_send_request (&msg_data);
+  if (BVIEW_STATUS_SUCCESS != rv)
+  {
+    LOG_POST (BVIEW_LOG_ERROR,
+        "Failed to send plugin message to bst application. err = %d\r\n", rv);
+       return BVIEW_STATUS_FAILURE;
+  }
+  return BVIEW_STATUS_SUCCESS;
+ 
+}

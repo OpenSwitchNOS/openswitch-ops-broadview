@@ -203,6 +203,14 @@ BVIEW_STATUS system_utils_app_main (void)
     {
       return BVIEW_STATUS_FAILURE;
     }
+
+    /* Get number of ports */
+    if (BVIEW_STATUS_SUCCESS !=
+        sbapi_system_asic_num_ports_get (id,
+          &pswitchProp->asicInfo[id].numPorts))
+    {
+      return BVIEW_STATUS_FAILURE;
+    }
   }
 
   /* get the system UID */

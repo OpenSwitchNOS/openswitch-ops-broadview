@@ -204,7 +204,8 @@ BVIEW_STATUS bst_config_feature_set (BVIEW_BST_REQUEST_MSG_t * msg_data)
         "Unable to extract the bst mode from asic. err: %d \r\n", rv);
     return rv;
   }
- 
+
+#if 0 
    /* now check if the h/w is set to the same state as requested.
       if not, then only program the asic.. else not required */
 
@@ -213,11 +214,13 @@ BVIEW_STATUS bst_config_feature_set (BVIEW_BST_REQUEST_MSG_t * msg_data)
     /* every thing is fine. both are in sync.. just return */
     return rv;
   }
-
+#endif
  /* Set the asic with the desired config to control bst */  
   bstMode.enableStatsMonitoring = msg_data->request.config.bstEnable;
   bstMode.enablePeriodicCollection = ptr->sendAsyncReports;
   bstMode.collectionPeriod = ptr->collectionInterval;
+  bstMode.bstMaxTriggers = ptr->bstMaxTriggers;
+  bstMode.sendSnapshotOnTrigger = ptr->sendSnapshotOnTrigger;
   rv = sbapi_bst_config_set (msg_data->unit, &bstMode);
   if (BVIEW_STATUS_SUCCESS == rv)
   {
@@ -392,6 +395,40 @@ BVIEW_STATUS bst_config_track_set (BVIEW_BST_REQUEST_MSG_t * msg_data)
   bstMode.enableIngressStatsMonitoring = trackIngress;
   bstMode.enableEgressStatsMonitoring = trackEgress;
   bstMode.mode = trackPeakStats;
+
+  bstMode.trackIngressPortPriorityGroup =
+            msg_data->request.track.trackIngressPortPriorityGroup;
+  bstMode.trackIngressPortServicePool =
+            msg_data->request.track.trackIngressPortServicePool;
+  bstMode.trackIngressServicePool =
+            msg_data->request.track.trackIngressServicePool;
+  bstMode.trackEgressPortServicePool =
+            msg_data->request.track.trackEgressPortServicePool;
+  bstMode.trackEgressServicePool =
+            msg_data->request.track.trackEgressServicePool;
+  bstMode.trackEgressUcQueue =
+            msg_data->request.track.trackEgressUcQueue;
+  bstMode.trackEgressUcQueueGroup =
+            msg_data->request.track.trackEgressUcQueueGroup;
+  bstMode.trackEgressMcQueue =
+            msg_data->request.track.trackEgressMcQueue;
+  bstMode.trackEgressCpuQueue =
+            msg_data->request.track.trackEgressCpuQueue;
+  bstMode.trackEgressRqeQueue =
+            msg_data->request.track.trackEgressRqeQueue;
+  bstMode.trackDevice =
+            msg_data->request.track.trackDevice;
+
+  bstMode.enablePeriodicCollection =  config_ptr->sendAsyncReports;
+  bstMode.collectionPeriod =  config_ptr->collectionInterval;
+  bstMode.bstMaxTriggers =  config_ptr->bstMaxTriggers;
+  bstMode.sendSnapshotOnTrigger = config_ptr->sendSnapshotOnTrigger;
+  bstMode.statUnitsInCells = config_ptr->statUnitsInCells;
+  bstMode.statsInPercentage = config_ptr->statsInPercentage;
+  bstMode.triggerTransmitInterval = config_ptr->triggerTransmitInterval;
+  bstMode.sendIncrementalReport = config_ptr->sendIncrementalReport;
+
+
 /* program the asic. */
   rv = sbapi_bst_config_set (msg_data->unit, &bstMode);
   if (BVIEW_STATUS_SUCCESS == rv)
@@ -998,5 +1035,183 @@ BVIEW_STATUS bst_module_register ()
   return rv;
 }
 
+BVIEW_STATUS bst_update_config_set(BVIEW_BST_REQUEST_MSG_t * msg_data)
+{
+  BVIEW_BST_TRACK_PARAMS_t *track_ptr;
+  BVIEW_BST_CONFIG_PARAMS_t *ptr;
+  bool timerUpdateReqd = false;
+  int tmpMask = 0;
 
+  if (NULL == msg_data)
+    return BVIEW_STATUS_FAILURE;
+
+  if (msg_data->msg_type == BVIEW_BST_CMD_API_UPDATE_FEATURE)
+  {
+    /* get the configuration structure pointer  for the desired unit */
+    ptr = BST_CONFIG_FEATURE_PTR_GET (msg_data->unit);
+    if (NULL == ptr)
+    {
+      return BVIEW_STATUS_INVALID_PARAMETER;
+    }
+
+    BST_RWLOCK_WR_LOCK(msg_data->unit);
+
+    tmpMask = msg_data->request.config.configMask;
+
+
+    if ((tmpMask & (1 << BST_CONFIG_PARAMS_COLL_INTRVL)) &&
+	(ptr->collectionInterval != msg_data->request.config.collectionInterval))
+    {
+      /* Collection interval has changed.
+	 so need to register the modified interval with the timer */
+      ptr->collectionInterval = msg_data->request.config.collectionInterval;
+      timerUpdateReqd = true;
+    }
+
+    if ((tmpMask & (1 << BST_CONFIG_PARAMS_SND_SNAP_TGR)) &&
+	(ptr->sendSnapshotOnTrigger != msg_data->request.config.sendSnapshotOnTrigger))
+    {
+      ptr->sendSnapshotOnTrigger = msg_data->request.config.sendSnapshotOnTrigger;
+    }
+
+    if ((tmpMask & (1 << BST_CONFIG_PARAMS_TGR_RATE_LIMIT)) &&
+	(ptr->bstMaxTriggers != msg_data->request.config.bstMaxTriggers))
+    {
+      ptr->bstMaxTriggers = msg_data->request.config.bstMaxTriggers;
+    }
+
+    if ((tmpMask & (1 << BST_CONFIG_PARAMS_TGR_RL_INTVL)) &&
+	(ptr->triggerTransmitInterval != msg_data->request.config.triggerTransmitInterval))
+    {
+      ptr->triggerTransmitInterval = msg_data->request.config.triggerTransmitInterval;
+    }
+
+    /* request is always the negation of the variable. Hence checking 
+       for equality. If same then change the variable */
+    if (tmpMask & (1 << BST_CONFIG_PARAMS_ASYNC_FULL_REP)) 
+    {
+      ptr->sendIncrementalReport = (msg_data->request.config.sendIncrementalReport == 0)?1:0;
+    }
+
+
+    if ((tmpMask & (1 << BST_CONFIG_PARAMS_STATS_IN_PERCENT)) &&
+	(ptr->statsInPercentage != msg_data->request.config.statsInPercentage))
+    {
+      /* Store the data is desired in percentage */
+      ptr->statsInPercentage = msg_data->request.config.statsInPercentage;
+    }
+
+    if (tmpMask & (1 << BST_CONFIG_PARAMS_SND_ASYNC_REP))
+    {
+      if (true == msg_data->request.config.sendAsyncReports)
+      {
+	/* request contains sendAsyncReports = true */
+	if (true != ptr->sendAsyncReports)
+	{
+	  /* old config is not enabled for sending async reports.
+	     now it is enabled.. so need to register with timer*/
+	  ptr->sendAsyncReports = true;
+	  timerUpdateReqd = true;
+	}
+	/*
+	   Register with the timer for periodic callbacks */
+	if (true == timerUpdateReqd)
+	{
+	  bst_periodic_collection_timer_add (msg_data->unit);
+	}
+      }
+      else
+      {
+	ptr->sendAsyncReports = false;
+	/* Periodic report collection is turned off...
+	   so no need for  the timer.
+	   delete the timer */
+	bst_periodic_collection_timer_delete (msg_data->unit);
+      }
+    }
+
+    if ((tmpMask & (1 << BST_CONFIG_PARAMS_STATS_UNITS)) &&
+	(ptr->statUnitsInCells != msg_data->request.config.statUnitsInCells))
+    {
+      /* Store the data is desired in bytes or cells */
+      ptr->statUnitsInCells = msg_data->request.config.statUnitsInCells;
+    }
+    if ((tmpMask & (1 << BST_CONFIG_PARAMS_ENABLE)) && 
+	(ptr->bstEnable != msg_data->request.config.bstEnable))
+    {
+      ptr->bstEnable = msg_data->request.config.bstEnable;
+    }
+
+    BST_RWLOCK_UNLOCK(msg_data->unit);
+  }
+  if (msg_data->msg_type == BVIEW_BST_CMD_API_UPDATE_TRACK)
+  {
+
+    track_ptr = BST_CONFIG_TRACK_PTR_GET (msg_data->unit);
+
+    if ((NULL == track_ptr))
+    {
+      return BVIEW_STATUS_INVALID_PARAMETER;
+    }
+
+    BST_RWLOCK_WR_LOCK(msg_data->unit);
+    if (true == msg_data->request.track.trackIngressPortPriorityGroup)
+    {
+      track_ptr->trackIngressPortPriorityGroup = true;
+    }
+
+    if (true == msg_data->request.track.trackIngressPortServicePool)
+    {
+      track_ptr->trackIngressPortServicePool = true;
+    }
+
+    if (true == msg_data->request.track.trackIngressServicePool)
+    {
+      track_ptr->trackIngressServicePool = true;
+    }
+
+    if (true == msg_data->request.track.trackEgressPortServicePool)
+    {
+      track_ptr->trackEgressPortServicePool = true;
+    }
+   
+    if (true == msg_data->request.track.trackEgressServicePool)
+    {
+      track_ptr->trackEgressServicePool = true;
+    }
+
+    if (true == msg_data->request.track.trackEgressUcQueue)
+    {
+      track_ptr->trackEgressUcQueue = true;
+    }
+
+    if (true == msg_data->request.track.trackEgressUcQueueGroup)
+    {
+      track_ptr->trackEgressUcQueueGroup = true;
+    }
+
+    if (true == msg_data->request.track.trackEgressMcQueue)
+    {
+      track_ptr->trackEgressMcQueue = true;
+    }
+
+    if (true == msg_data->request.track.trackEgressCpuQueue)
+    {
+      track_ptr->trackEgressCpuQueue = true;
+    }
+
+    if (true == msg_data->request.track.trackEgressRqeQueue)
+    {
+      track_ptr->trackEgressRqeQueue = true;
+    }
+
+    if (true == msg_data->request.track.trackDevice)
+    {
+      track_ptr->trackDevice = true;
+    }
+    BST_RWLOCK_UNLOCK(msg_data->unit);
+  }
+
+  return BVIEW_STATUS_SUCCESS;
+}
 

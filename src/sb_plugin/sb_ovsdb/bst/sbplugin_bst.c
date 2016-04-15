@@ -212,7 +212,130 @@ BVIEW_STATUS sbplugin_ovsdb_bst_infra_init()
   
   return rv;
 }
+/*********************************************************************
+* @brief  Prepare MASK of ream's
+*
+* @param[in]   data                    - Pointer to BST config
+* @param[in]   config                  - Pointer to OVSDB config
+*
+* @notes    none
+*
+*
+*********************************************************************/
+void sbplugin_ovsdb_mask_to_realm (BVIEW_OVSDB_CONFIG_DATA_t *config, 
+                                   BVIEW_BST_CONFIG_t *data)
+{
 
+  
+  if (config->trackingMask & (1 << BVIEW_BST_INGRESS_PORT_PG))
+  {
+    data->trackIngressPortPriorityGroup = true;
+  }
+  if (config->trackingMask & (1 << BVIEW_BST_INGRESS_PORT_SP))
+  {
+    data->trackIngressPortServicePool = true;
+  }
+  if (config->trackingMask & (1 << BVIEW_BST_INGRESS_SP))
+  {
+    data->trackIngressServicePool = true;
+  }
+  if (config->trackingMask & (1 << BVIEW_BST_EGRESS_PORT_SP))
+  {
+    data->trackEgressPortServicePool = true;
+  }
+  if (config->trackingMask & (1 << BVIEW_BST_EGRESS_SP))
+  {
+    data->trackEgressServicePool = true;
+  }
+  if (config->trackingMask & (1 << BVIEW_BST_EGRESS_UC_QUEUE))
+  {
+    data->trackEgressUcQueue = true;
+  }
+  if (config->trackingMask & (1 << BVIEW_BST_EGRESS_UC_QUEUEGROUPS))
+  {
+    data->trackEgressUcQueueGroup = true;
+  }
+  if (config->trackingMask & (1 << BVIEW_BST_EGRESS_MC_QUEUE))
+  {
+    data->trackEgressMcQueue = true;
+  }
+  if (config->trackingMask & (1 << BVIEW_BST_EGRESS_CPU_QUEUE))
+  {
+    data->trackEgressCpuQueue = true;
+  }
+  if (config->trackingMask & (1 << BVIEW_BST_EGRESS_RQE_QUEUE))
+  {
+    data->trackEgressRqeQueue = true;
+  }
+  if (config->trackingMask & (1 << BVIEW_BST_DEVICE))
+  {
+    data->trackDevice = true;
+  }
+  return;
+}
+ 
+
+/*********************************************************************
+* @brief  Prepare MASK of ream's
+*
+* @param[in]   data                    - Pointer to BST config
+* @param[in]   config                  - Pointer to OVSDB config
+*
+* @notes    none
+*
+*
+*********************************************************************/
+void sbplugin_ovsdb_realm_mask (BVIEW_BST_CONFIG_t *data,
+                                BVIEW_OVSDB_CONFIG_DATA_t *config)
+{
+  config->trackingMask = 0;
+  if (data->trackIngressPortPriorityGroup)
+  {
+    config->trackingMask |= (1 << BVIEW_BST_INGRESS_PORT_PG);
+  }
+  if (data->trackIngressPortServicePool)
+  {
+    config->trackingMask |= (1 << BVIEW_BST_INGRESS_PORT_SP);
+  }
+  if (data->trackIngressServicePool)
+  {
+    config->trackingMask |= (1 << BVIEW_BST_INGRESS_SP);
+  }
+  if (data->trackEgressPortServicePool)
+  {
+    config->trackingMask |= (1 << BVIEW_BST_EGRESS_PORT_SP);
+  }
+  if (data->trackEgressServicePool)
+  {
+    config->trackingMask |= (1 << BVIEW_BST_EGRESS_SP);
+  }
+  if (data->trackEgressUcQueue)
+  {
+    config->trackingMask |= (1 << BVIEW_BST_EGRESS_UC_QUEUE);
+  }
+  if (data->trackEgressUcQueueGroup)
+  {
+    config->trackingMask |= (1 << BVIEW_BST_EGRESS_UC_QUEUEGROUPS);
+  }
+  if (data->trackEgressMcQueue)
+  {
+    config->trackingMask |= (1 << BVIEW_BST_EGRESS_MC_QUEUE);
+  }
+  if (data->trackEgressCpuQueue)
+  {
+    config->trackingMask |= (1 << BVIEW_BST_EGRESS_CPU_QUEUE);
+  }
+  if (data->trackEgressRqeQueue)
+  {
+    config->trackingMask |= (1 <<  BVIEW_BST_EGRESS_RQE_QUEUE);
+  }
+  if (data->trackDevice)
+  {
+    config->trackingMask |= (1 << BVIEW_BST_DEVICE);
+  }
+  return;
+}
+ 
 /*********************************************************************
 * @brief  BST feature configuration set function
 *
@@ -254,7 +377,14 @@ BVIEW_STATUS sbplugin_ovsdb_bst_config_set (int asic, BVIEW_BST_CONFIG_t *data)
   config.bst_tracking_mode    = (int) data->mode; 
   /* Periodic collection should be enabled whenever bst is enabled.
      This flag is used to collect BST stats periodically and update OVSDB by bufmon_stats thread */ 
-  config.periodic_collection  = config.bst_enable;
+  config.periodic_collection  = data->enablePeriodicCollection;
+  config.collection_interval  = data->collectionPeriod;
+  config.bstMaxTriggers  = data->bstMaxTriggers;
+  config.sendSnapshotOnTrigger  = data->sendSnapshotOnTrigger;
+  config.trackInit = data->trackInit;
+
+  /* Prepare of MASK of ream's enabled for tracking*/ 
+  sbplugin_ovsdb_realm_mask (data, &config);
 
   rv = bst_ovsdb_bst_config_set(asic, &config);
   if (BVIEW_STATUS_SUCCESS != rv)
@@ -311,6 +441,10 @@ BVIEW_STATUS sbplugin_ovsdb_bst_config_get (int asic,
   data->mode = config.bst_tracking_mode;
   data->enablePeriodicCollection = config.periodic_collection;
   data->collectionPeriod =  config.collection_interval;
+  data->bstMaxTriggers =  config.bstMaxTriggers;
+  data->sendSnapshotOnTrigger =  config.sendSnapshotOnTrigger;
+  /* prepare the track info */
+  sbplugin_ovsdb_mask_to_realm(&config, data);
 
  return  BVIEW_STATUS_SUCCESS;
 }
@@ -1508,7 +1642,10 @@ BVIEW_STATUS sbplugin_ovsdb_bst_rqeq_threshold_set (int asic,
 *********************************************************************/
 BVIEW_STATUS  sbplugin_ovsdb_bst_clear_stats(int asic)
 {
-  return BVIEW_STATUS_SUCCESS; 
+  /*validate ASIC*/
+  SB_OVSDB_VALID_UNIT_CHECK (asic);
+
+  return  bst_ovsdb_clear_stats(asic); 
 }
 
 /*********************************************************************
@@ -1526,7 +1663,10 @@ BVIEW_STATUS  sbplugin_ovsdb_bst_clear_stats(int asic)
 *********************************************************************/
 BVIEW_STATUS  sbplugin_ovsdb_bst_clear_thresholds  (int asic)
 {
-  return BVIEW_STATUS_SUCCESS;
+  /*validate ASIC*/
+  SB_OVSDB_VALID_UNIT_CHECK (asic);
+
+  return bst_ovsdb_clear_thresholds(asic);
 }
 
 /*********************************************************************
@@ -1549,6 +1689,16 @@ BVIEW_STATUS  sbplugin_ovsdb_bst_register_trigger (int asic,
                                         BVIEW_BST_TRIGGER_CALLBACK_t callback, 
                                         void *cookie)
 {
+  BVIEW_STATUS rv = BVIEW_STATUS_SUCCESS;
+
+  rv = bst_ovsdb_bst_register_trigger (asic, callback, cookie);
+  if (SB_OVSDB_RV_ERROR (rv))
+  {
+    SB_OVSDB_DEBUG_PRINT (
+                "BST:ASIC(%d) Failed to Register trigger callback", asic);
+    return BVIEW_STATUS_FAILURE;
+  }
+  
   return BVIEW_STATUS_SUCCESS;
 }
 

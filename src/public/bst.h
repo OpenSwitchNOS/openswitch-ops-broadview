@@ -209,6 +209,27 @@ typedef struct _bst_config_
     /*Periodic collection*/
     bool enablePeriodicCollection;
     int  collectionPeriod;
+    int statsInPercentage;
+    int statUnitsInCells;
+    int bstMaxTriggers;
+    int sendSnapshotOnTrigger;
+    int triggerTransmitInterval;
+    int sendIncrementalReport;
+
+    /* Tracking configurations*/
+    bool trackIngressPortPriorityGroup;
+    bool trackIngressPortServicePool;
+    bool trackIngressServicePool;
+    bool trackEgressPortServicePool;
+    bool trackEgressServicePool;
+    bool trackEgressUcQueue;
+    bool trackEgressUcQueueGroup;
+    bool trackEgressMcQueue;
+    bool trackEgressCpuQueue;
+    bool trackEgressRqeQueue;
+    bool trackDevice;
+    bool trackInit;
+
 } BVIEW_BST_CONFIG_t;
 
 /* Trigger Type */
@@ -482,7 +503,82 @@ BVIEW_STATUS bst_app_main(void);
 *********************************************************************/
 BVIEW_STATUS bst_app_config_init(unsigned int num_units);
 
-       
+
+BVIEW_STATUS bst_plugin_cb(void *request);
+/*********************************************************************
+* @brief : API from plugin to configure the bst feature params
+*
+* @param[in] asicId : asic id
+* @param[in] bstEnable  : bst Enable
+* @param[in] sendAsyncReports  : send async reports
+* @param[in] collectionInterval  : collection interval for async reports
+* @param[in] statsInPercentage  : stats in percentage
+* @param[in] statUnitsInCells  : stats in bytes or cells
+* @param[in] bstMaxTriggers  : maximum number of trigger reports
+* @param[in] sendSnapshotOnTrigger  : send partial or complete report in trigger
+* @param[in] bstEnable  : seconds for which the max number of
+*                         trigger reports is applicable
+* @param[in] sendIncrementalReport  : incremental report or complete report
+*
+* @retval  : BVIEW_STATUS_SUCCESS : the message is successfully posted to bst queue.
+* @retval  : BVIEW_STATUS_FAILURE : failed to post the message to bst.
+* @retval  : BVIEW_STATUS_INVALID_PARAMETER : invalid parameter.
+*
+* @note    : This api is used when underlying plugin reads the config file
+             then it posts the request to bst application to configures bst feature params.
+*
+* @end
+*********************************************************************/
+BVIEW_STATUS bst_prepare_configure_bst_feature_req ( int asicId,
+                                                     int bstEnable,
+                                                     int sendAsyncReports,
+                                                     int collectionInterval,
+                                                     int statsInPercentage,
+                                                     int statUnitsInCells,
+                                                     int bstMaxTriggers,
+                                                     int sendSnapshotOnTrigger,
+                                                     int triggerTransmitInterval,
+                                                     int sendIncrementalReport);
+/*********************************************************************
+* @brief : API from plugin to configure the track feature params
+*
+* @param[in] asicId : asic id
+* @param[in] trackPeakStats : track mode in peak or current
+* @param[in] trackIngressPortPriorityGroup
+* @param[in] trackIngressPortServicePool :
+* @param[in] trackIngressServicePool :
+* @param[in] trackEgressPortServicePool :
+* @param[in] trackEgressServicePool :
+* @param[in] trackEgressUcQueue :
+* @param[in] trackEgressUcQueueGroup :
+* @param[in] trackEgressMcQueue :
+* @param[in] trackEgressCpuQueue :
+* @param[in] trackEgressRqeQueue :
+* @param[in] trackDevice :
+*
+* @retval  : BVIEW_STATUS_SUCCESS : the message is successfully posted to bst queue.
+* @retval  : BVIEW_STATUS_FAILURE : failed to post the message to bst.
+* @retval  : BVIEW_STATUS_INVALID_PARAMETER : invalid parameter.
+*
+* @note    : This api posts the request to bst application to set the track params.
+*
+* @end
+*********************************************************************/
+BVIEW_STATUS bst_prepare_configure_tracking_req (int asicId,
+                                                 int trackPeakStats,
+                                                 int trackIngressPortPriorityGroup,
+                                                 int trackIngressPortServicePool,
+                                                 int trackIngressServicePool,
+                                                 int trackEgressPortServicePool,
+                                                 int trackEgressServicePool,
+                                                 int trackEgressUcQueue,
+                                                 int trackEgressUcQueueGroup,
+                                                 int trackEgressMcQueue,
+                                                 int trackEgressCpuQueue,
+                                                 int trackEgressRqeQueue,
+                                                 int trackDevice);
+
+      
 #ifdef __cplusplus
 }
 #endif

@@ -237,6 +237,7 @@ BVIEW_STATUS system_agent_config_init(BVIEW_SYSTEM_AGENT_CONFIG_t *config)
 *********************************************************************/
 void bview_system_init_ph2(void *param)
 {
+   char ovsdb_sock[2048] = "unix:/var/run/openvswitch/db.sock";
 
   /* create the mutex for agent_config data */
   pthread_mutex_init (&system_agent_mutex, NULL);
@@ -258,7 +259,7 @@ void bview_system_init_ph2(void *param)
     LOG_POST (BVIEW_LOG_CRITICAL, "Failed to initialize south-bound plugin\r\n");
   }  
   /*Initialize south-bound BST plugin*/ 
-  if (sbplugin_common_init() != BVIEW_STATUS_SUCCESS)
+  if (sbplugin_common_init(ovsdb_sock) != BVIEW_STATUS_SUCCESS)
   {
     LOG_POST (BVIEW_LOG_CRITICAL, "Failed to initialize south-bound BST plugin r\n");
   }  

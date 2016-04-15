@@ -32,6 +32,7 @@
 #include "sbplugin_system.h"
 #include "sbplugin_ovsdb.h"
 #include "sbplugin_system_map.h"
+#include "ovsdb_system_ctl.h"
 #include "common/platform_spec.h"
 
 /* Array to hold ASIC properties data based for Maximum platforms*/
@@ -659,6 +660,7 @@ BVIEW_STATUS sbplugin_ovsdb_system_init (BVIEW_SB_SYSTEM_FEATURE_t    *ovsdbSyst
   for (unit = 0; unit < max_units; unit++)
   {
     ovsdbSystemFeat->numSupportedAsics++;
+    system_ovsdb_common_get_asicinfo(unit, &num_ports);
     num_front_panel_ports = num_ports;
     asicDb[index].scalingParams.numPorts  = num_front_panel_ports;
 
