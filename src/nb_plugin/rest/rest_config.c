@@ -27,6 +27,8 @@
 
 #include "rest.h"
 
+pthread_mutex_t rest_server_mutex;
+
 /******************************************************************
  * @brief  Initializes configuration, reads it from file or assumes defaults.
  *
@@ -46,6 +48,8 @@ BVIEW_STATUS rest_config_init(REST_CONTEXT_t *rest)
     /* create the mutex for agent_config data */
     rest_mutex = &rest->config_mutex;
     pthread_mutex_init (rest_mutex, NULL);
+
+    pthread_mutex_init (&rest_server_mutex, NULL);
 
     /* get the client port */
     system_agent_client_port_get(&rest->config.clientPort);
