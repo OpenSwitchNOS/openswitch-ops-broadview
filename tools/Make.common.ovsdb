@@ -25,6 +25,8 @@ ifeq ($(SBPLUGIN), ovsdb)
     sbdriver = sbovsdb
     sb_ovsdb_arc = \
         $(OPENAPPS_OUTPATH)/sbovsdb/sbovsdb.a
+
+    apps_cli = broadview_cli
 endif
 
 ifeq ($(PLATFORM), UB-OVSDB)
@@ -42,7 +44,7 @@ ifeq ($(PLATFORM), OP-OVSDB)
   static_lib += \
         $(sb_ovsdb_arc) 
 
-  dynamic_sb_lib += -lovscommon
+  dynamic_sb_lib += -lovscommon -lovsdb -lopsutils
 
 #                    -lopenvswitch \
 #                    -lovscommon
@@ -53,6 +55,13 @@ sbovsdb clean-sbovsdb debug-sbovsdb::
 	@echo Making SDK SB-OVSDB
 	@export
 	$(MAKE) $(DEBUG_PARMS) -C $(OPENAPPS_BASE)/src/sb_plugin/sb_ovsdb/ $@
+
+broadview_cli clean-broadview_cli debug-broadview_cli::
+	@echo Making OVSDB CLI
+	@export
+	$(MAKE) $(DEBUG_PARMS) -C $(OPENAPPS_BASE)/src/cli/ $@
+	$(CC) ${CFLAGS} -shared -Wl,-soname,libbroadview_cli.so.1 -o $(OPENAPPS_BUILD_DELIVERABLES_DIR)/libbroadview_cli.so.1 $(PLAT_OBJS) -Wl,--whole-archive $(OPENAPPS_OUTPATH)/cli/broadview_cli.a -Wl,--no-whole-archive -lc -lpthread -lm -lrt ${PLAT_LIBS}
+
 
 ifeq ($(PLATFORM), UB-OVSDB)
 ovsdb:

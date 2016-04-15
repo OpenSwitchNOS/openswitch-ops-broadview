@@ -28,158 +28,119 @@
 #include <stream.h>
 
 /* BroadView Includes*/
+#include "broadview.h"
+#include "ovsdb_common_ctl.h"
 #include "sbplugin_bst_ovsdb.h"
 #include "sbplugin_bst_cache.h"
+#include "ovsdb_bst_ctl.h"
 
-#define OVSDB_CONFIG_MAX_LINE_LENGTH       256
-#define OVSDB_CONFIG_FILE                  "/etc/broadview_ovsdb_config.cfg"
-#define OVSDB_CONFIG_READMODE              "r"
-#define OVSDB_CONFIG_DELIMITER             "="
-#define OVSDB_CONFIG_MODE_DELIMITER        ":"
-#define OVSDB_MODE_TCP                     "tcp"
-#define OVSDB_MODE_FILE                    "unix"
-#define OVSDB_SOCKET                       "ovsdb_socket"
-#define OVSDB_MAX_LINES                    2  
-#define _DEFAULT_OVSDB_SOCKET "unix:/var/run/openvswitch/db.sock"
+/* BST BID table parameters */
+extern BVIEW_BST_OVSDB_BID_PARAMS_t  bid_tab_params[SB_OVSDB_BST_STAT_ID_MAX_COUNT];
 
-#define OVSDB_ASSERT_CONFIG_FILE_ERROR(condition) do { \
-    if (!(condition)) { \
-        SB_OVSDB_LOG(BVIEW_LOG_ERROR, \
-                    "OVSDB (%s:%d) Unrecognized Config File format, may be corrupted. Errno : %s  \n", \
-                    __func__, __LINE__, strerror(errno)); \
-                        fclose(configFile); \
-        return (BVIEW_STATUS_FAILURE); \
-    } \
-} while(0)
-
-
-/* UUID size id 36 as per RFC 7047*/
-#define   OVSDB_UUID_SIZE            36
 
 
 #define   BST_OVSDB_THRESHOLD_JSON    "[\"OpenSwitch\",{\"op\":\"update\",\"table\":\"bufmon\",\"row\":{\"trigger_threshold\":%lld},\"where\":[[\"name\",\"==\", \"%s\"]]}]"
 
 
-#define   BST_OVSDB_CONFIG_JSON_FORMAT       "[\"OpenSwitch\",{\"op\":\"update\",\"table\":\"System\",\"row\":{\"bufmon_config\":[\"map\",[[\"enabled\",\"%s\"], [\"counters_mode\",\"%s\"], [\"periodic_collection_enabled\",\"%s\"]]]} , \"where\":[[\"_uuid\",\"==\",[\"uuid\", \"%s\"]]]}]"
+#define   BST_OVSDB_CONFIG_JSON_FORMAT       "[\"OpenSwitch\",{\"op\":\"update\",\"table\":\"System\",\"row\":{\"bufmon_config\":[\"map\",[[\"enabled\",\"%s\"], [\"counters_mode\",\"%s\"], [\"periodic_collection_enabled\",\"%s\"], [\"snapshot_on_threshold_trigger\", \"%s\"], [\"collection_period\", \"%s\"], [\"threshold_trigger_rate_limit\", \"%s\"],[\"threshold_trigger_collection_enabled\", \"%s\"]]]} , \"where\":[[\"_uuid\",\"==\",[\"uuid\", \"%s\"]]]}]"
 
 #define  BST_JSON_MONITOR_BUFMON   "[\"OpenSwitch\",null,{\"bufmon\":[{\"columns\":[\"counter_value\",\"counter_vendor_specific_info\",\"enabled\",\"hw_unit_id\",\"name\",\"status\",\"trigger_threshold\",\"_version\"]}], \"System\":[{\"columns\":[\"bufmon_config\"]},{\"columns\":[\"bufmon_info\"]}]}]"
 
 
-#define  BST_OVSDB_FORM_CONFIG_JSON(_buf, _format, args...) \
-                                  {\
-                                    sprintf ((_buf), (_format), ##args);\
-                                  }  
+#define   BST_OVSDB_CLEAR_THRESHOLDS_JSON  "[\"OpenSwitch\",{\"op\":\"update\",\"table\":\"bufmon\",\"row\":{\"trigger_threshold\":[\"set\",[]]},\"where\":[[\"hw_unit_id\",\"==\",%d]]}]"
+#define   BST_OVSDB_CLEAR_STATS_JSON  "[\"OpenSwitch\",{\"op\":\"update\",\"table\":\"bufmon\",\"row\":{\"counter_value\":0},\"where\":[[\"hw_unit_id\",\"==\",%d]]}]"
 
-#define  OVSDB_GET_COLUMN(_column,_old, _new,_columnname)   \
-       {\
-         if (!(_old)) \
-         { \
-           (_column) = shash_find_data (json_object((_new)), (_columnname));  \
-         } \
-         else if (!(_new)) \
-         { \
-           (_column) = shash_find_data (json_object((_old)), (_columnname));  \
-         } \
-         else \
-         { \
-           (_column) = shash_find_data (json_object((_new)), (_columnname)); \
-         }\
-       }
+#define    BST_JSON_TRACKING_FORMAT "[\"OpenSwitch\",{\"op\":\"update\",\"table\":\"bufmon\",\"row\":{\"enabled\":%s},\"where\":[[\"counter_vendor_specific_info\",\"includes\", [\"map\",[[\"realm\",\"%s\"]]]]]}]"
+
 
 static char system_table_uuid[OVSDB_UUID_SIZE];
 #define  BST_NUM_MONITOR_TABLES              2
 const char *bst_table_name[BST_NUM_MONITOR_TABLES] = {"bufmon", "System"};
 extern sem_t monitor_init_done_sem;
 
+
+BVIEW_BST_REALM_MAP_t realm_id_map[BVIEW_BST_COUNT] = {
+    {.realmName = "device",
+     .realmId = BVIEW_BST_DEVICE},
+    {.realmName = "ingress-port-priority-group",
+     .realmId =BVIEW_BST_INGRESS_PORT_PG},
+    {.realmName = "ingress-port-service-pool",
+     .realmId =BVIEW_BST_INGRESS_PORT_SP},
+    {.realmName ="ingress-service-pool",
+     .realmId =BVIEW_BST_INGRESS_SP},
+    {.realmName ="egress-port-service-pool",
+     .realmId =BVIEW_BST_EGRESS_PORT_SP},
+    {.realmName ="egress-service-pool",
+     .realmId =BVIEW_BST_EGRESS_SP},
+    {.realmName ="egress-uc-queue",
+     .realmId =BVIEW_BST_EGRESS_UC_QUEUE},
+    {.realmName ="egress-uc-queue-group",
+     .realmId =BVIEW_BST_EGRESS_UC_QUEUEGROUPS},
+    {.realmName ="egress-mc-queue",
+     .realmId =BVIEW_BST_EGRESS_MC_QUEUE},
+    {.realmName ="egress-cpu-queue",
+     .realmId =BVIEW_BST_EGRESS_CPU_QUEUE},
+    {.realmName ="egress-rqe-queue",
+     .realmId =BVIEW_BST_EGRESS_RQE_QUEUE
+    }
+  };
+
+
 /*********************************************************************
-* @brief       Check the return error code of both reply and request
+* @brief      Get Realm name form id
 *
-* @param[in]  error               -  Erorr 
-* @param[in]  reply               -  Pointer to reply JSON message
-*                       
-* @retval     schema if successful.
-*             NULL   if failure.
+* @param[in]  realmId               -  realm ID
+* @param[in]  realmName             - realm Name
 *
+* @retval
 *********************************************************************/
-static void
-check_txn(int error, struct jsonrpc_msg **reply_)
+static BVIEW_STATUS bst_ovsdb_realm_name_get (int realmId,
+                                              char *realmName)
 {
-  struct jsonrpc_msg *reply ;
+  unsigned int i = 0;
 
-  if (!reply_)
+  if (realmId >= BVIEW_BST_REALM_ID_MAX)
   {
-    return;
+    return BVIEW_STATUS_FAILURE;
   }
-  reply = *reply_;
+  for (i = BVIEW_BST_REALM_ID_MIN; i < BVIEW_BST_REALM_ID_MAX; i++)
+  {
+    if (realmId == realm_id_map[i-1].realmId)
+    {
+      sprintf (realmName, "%s", realm_id_map[i-1].realmName);
+    }
+  }
 
-  if (error) 
-  {
-    SB_OVSDB_DEBUG_PRINT ("Transaction failed");
-    return;  
-  }
-
-  if (reply->error) 
-  {
-    SB_OVSDB_DEBUG_PRINT ("Transaction returned errors");
-    return;
-  }
+  return BVIEW_STATUS_SUCCESS;
 }
 
 /*********************************************************************
-* @brief    Open JSON RPC session.
+* @brief      Get Realm Id form name 
 *
-* @param[in]     server          - Sock file/TCP/UDP port     
+* @param[in]  realmId               -  realm name 
+* @param[in]  realmName             - realm id 
 *
-* @retval        Pointer to JSON RPC session.
-*
-* @notes   
-*
-*
+* @retval
 *********************************************************************/
-static struct jsonrpc *
-open_jsonrpc(const char *server)
+static BVIEW_STATUS bst_ovsdb_realm_id_get (char *realmName,
+                                            int *realmId)
 {
-  struct stream *stream;
-  int error;
-  
-  /* NULL pointer validation*/
-  SB_OVSDB_NULLPTR_CHECK (server, NULL);
+  unsigned int i = 0;
 
-  error = stream_open_block(jsonrpc_stream_open(server, &stream,
-                              DSCP_DEFAULT), &stream);
-  if (error == EAFNOSUPPORT) 
+  if (realmName == NULL)
   {
-    struct pstream *pstream;
-
-    error = jsonrpc_pstream_open(server, &pstream, DSCP_DEFAULT);
-    if (error) 
-    {
-      SB_OVSDB_LOG (BVIEW_LOG_ERROR,
-                   "Failed to connect to: (%s)",
-                    server);
-      return NULL;
-    }
-
-    error = pstream_accept_block(pstream, &stream);
-    if (error) 
-    {
-      SB_OVSDB_LOG (BVIEW_LOG_ERROR,
-                   "Failed to accept connection: (%s)",
-                    server);
-      
-      pstream_close(pstream);
-      return NULL; 
-    }
-  } 
-  else if (error) 
+    return BVIEW_STATUS_FAILURE;
+  }
+  for (i = BVIEW_BST_REALM_ID_MIN; i < BVIEW_BST_REALM_ID_MAX; i++)
   {
-    SB_OVSDB_LOG (BVIEW_LOG_ERROR,
-                  "Failed to connect to (%s)",
-                  server);
-    return NULL;
+    if (0 == strcmp(realmName, realm_id_map[i-1].realmName))
+    {
+      *realmId = realm_id_map[i-1].realmId;
+      return BVIEW_STATUS_SUCCESS;
+    }
   }
 
-  return jsonrpc_open(stream);
+  return BVIEW_STATUS_FAILURE;
 }
 
 
@@ -210,8 +171,11 @@ bst_system_bufmon_config_update (struct json *json_object)
   struct json *sub_array = NULL;
   struct json *map = NULL;
   BVIEW_OVSDB_BST_DATA_t     *p_cache = NULL;
-  BVIEW_OVSDB_CONFIG_DATA_t  *bufmon_config = NULL; 
+  BVIEW_OVSDB_CONFIG_DATA_t  *bufmon_config = NULL;
+  BVIEW_OVSDB_CONFIG_DATA_t temp;
+  bool updated = false;
 
+  memset(&temp, 0, sizeof(BVIEW_OVSDB_CONFIG_DATA_t));
   /* NULL pointer validation */ 
   SB_OVSDB_NULLPTR_CHECK (json_object, BVIEW_STATUS_INVALID_PARAMETER);
 
@@ -254,32 +218,84 @@ bst_system_bufmon_config_update (struct json *json_object)
       value = json_array (sub_array)->elems[1];
       if (strcmp (key->u.string, "counters_mode") == 0)
       {
-         bufmon_config->bst_tracking_mode = 
-               ((strcmp (value->u.string, "peak") == 0)? BVIEW_BST_MODE_PEAK : BVIEW_BST_MODE_CURRENT);
+	temp.bst_tracking_mode = bufmon_config->bst_tracking_mode;
+	bufmon_config->bst_tracking_mode = 
+	  ((strcmp (value->u.string, "peak") == 0)? BVIEW_BST_MODE_PEAK : BVIEW_BST_MODE_CURRENT);
       }
       else if (strcmp (key->u.string, "enabled") ==0)
       {
-         bufmon_config->bst_enable = 
-               ((strcmp (value->u.string, "True") == 0)? true : false);  
+	temp.bst_enable = bufmon_config->bst_enable;
+	bufmon_config->bst_enable = 
+	  ((strcmp (value->u.string, "True") == 0)? true : false); 
+	if (bufmon_config->bst_enable != temp.bst_enable)
+	{
+	  bufmon_config->bst_enable = true;
+	  updated = true;
+	} 
       }
       else if (strcmp (key->u.string, "periodic_collection_enabled") ==0)
       {
-         bufmon_config->periodic_collection  =
-               ((strcmp (value->u.string, "True") == 0)? true : false);
+	temp.periodic_collection = bufmon_config->periodic_collection;
+	bufmon_config->periodic_collection  =
+	  ((strcmp (value->u.string, "True") == 0)? true : false);
+	if (bufmon_config->periodic_collection != temp.periodic_collection)
+	{
+	  updated = true;
+	}
       }
       else if (strcmp (key->u.string, "collection_period") ==0) 
       {
-         bufmon_config->collection_interval = atoi(value->u.string);
+	temp.collection_interval = bufmon_config->collection_interval;
+	bufmon_config->collection_interval = atoi(value->u.string);
+
+	if (bufmon_config->collection_interval != temp.collection_interval)
+	{
+	  updated = true;
+	}
+      }
+      else if (strcmp (key->u.string, "threshold_trigger_collection_enabled") ==0)
+      {
+        temp.triggerCollectionEnabled = bufmon_config->triggerCollectionEnabled;
+        bufmon_config->triggerCollectionEnabled  =
+               ((strcmp (value->u.string, "True") == 0)? true : false);
+        if (temp.triggerCollectionEnabled != bufmon_config->triggerCollectionEnabled)
+	{
+	  updated = true;
+	}
+      }
+      else if (strcmp (key->u.string, "snapshot_on_threshold_trigger") ==0)
+      {
+       temp.sendSnapshotOnTrigger = bufmon_config->sendSnapshotOnTrigger;
+        bufmon_config->sendSnapshotOnTrigger  =
+               ((strcmp (value->u.string, "True") == 0)? true : false);
+
+        if (temp.sendSnapshotOnTrigger != bufmon_config->sendSnapshotOnTrigger)
+	{
+	  updated = true;
+	}
+      }
+      else if (strcmp (key->u.string, "threshold_trigger_rate_limit") == 0)
+      {
+        temp.bstMaxTriggers = bufmon_config->bstMaxTriggers;
+         bufmon_config->bstMaxTriggers = atoi(value->u.string);
+        if (temp.bstMaxTriggers != bufmon_config->bstMaxTriggers)
+	{
+	  updated = true;
+	}
       }
     }
   }
 
+  if (true == updated)
+  {
+    /* notify the application about the change */
+    bst_notify_config_change(0, BVIEW_BST_CONFIG_FEATURE_UPDATE);
+  }
   /* Release lock */
   SB_OVSDB_RWLOCK_UNLOCK(p_cache->lock);
 
   return BVIEW_STATUS_SUCCESS;
 }
-
 /*********************************************************************
 * @brief    Update SB PLUGIN cache.
 *
@@ -289,7 +305,7 @@ bst_system_bufmon_config_update (struct json *json_object)
 *
 * @retval
 *
-* @notes    if Initial 
+* @notes    if Initial
 *
 *
 *********************************************************************/
@@ -298,53 +314,120 @@ bst_ovsdb_cache_update_table(const char *table_name, struct json *table_update,
                                bool initial)
 {
   struct shash_node *node;
+  BVIEW_OVSDB_BST_DATA_t     *p_cache = NULL;
+  int                         trackMask = 0;
+  int                         oldTrackMask = 0;
+
 
   /* NULL Pointer validation*/
   SB_OVSDB_NULLPTR_CHECK (table_update, BVIEW_STATUS_INVALID_PARAMETER);
   SB_OVSDB_NULLPTR_CHECK (table_name, BVIEW_STATUS_INVALID_PARAMETER);
 
   /* return if JSON type is not object*/
-  if (table_update->type != JSON_OBJECT) 
+  if (table_update->type != JSON_OBJECT)
   {
-     return BVIEW_STATUS_FAILURE;
+    return BVIEW_STATUS_FAILURE;
   }
-  /* Loop through all Nodes and update the cahce*/
-  SHASH_FOR_EACH (node, json_object(table_update)) 
+
+  p_cache = bst_ovsdb_cache_get ();
+  if (!p_cache)
   {
-    BVIEW_OVSDB_BID_INFO_t   row = {0,0};
+    return BVIEW_STATUS_FAILURE;
+  }
+
+  /* Acquire write lock*/
+  SB_OVSDB_RWLOCK_WR_LOCK(p_cache->lock);
+  /* store the previous config
+     for later inspection */
+  oldTrackMask = p_cache->config_data.trackingMask;
+  /* Release lock */
+  SB_OVSDB_RWLOCK_UNLOCK(p_cache->lock);
+
+  /* Loop through all Nodes and update the cahce*/
+  SHASH_FOR_EACH (node, json_object(table_update))
+  {
+    BVIEW_OVSDB_BID_INFO_t   row = {0,0,0};
     struct json *row_update = node->data;
-    struct json *old, *new, *hw_unit_id, *name, *counter_value, *trigger_threshold;
+    struct json *old, *new, *hw_unit_id, *name, *counter_value, *trigger_threshold, *enabled, *status;
+    bool   default_threshold = false;
+    int    port=0, queue=-1, bid =-1, realm_id;
 
     if (row_update->type != JSON_OBJECT) {
-        continue;
+      continue;
     }
     old = shash_find_data(json_object(row_update), "old");
     new = shash_find_data(json_object(row_update), "new");
     if (strcmp (table_name, "bufmon") == 0)
     {
       OVSDB_GET_COLUMN (hw_unit_id, old, new , "hw_unit_id")
-      OVSDB_GET_COLUMN (name, old, new , "name")
-      OVSDB_GET_COLUMN (counter_value, old, new , "counter_value")
-      OVSDB_GET_COLUMN (trigger_threshold, old, new , "trigger_threshold")
-      
-      /* Name + hw_unit_id is key, if both are NULL don't update the cache.*/
-      if (name && hw_unit_id)
-      {
-        if (counter_value && counter_value->type == JSON_INTEGER)
-        {
-          row.stat = counter_value->u.integer;
-        }
-          
-        if (trigger_threshold && trigger_threshold->type == JSON_INTEGER)
-        {
-           row.threshold = trigger_threshold->u.integer;
-        }
-    
-        /* Update BST cache*/
-        bst_ovsdb_row_update (hw_unit_id->u.integer, 
-                              name->u.string,
-                              &row);
-      }
+	OVSDB_GET_COLUMN (name, old, new , "name")
+	OVSDB_GET_COLUMN (counter_value, old, new , "counter_value")
+	OVSDB_GET_COLUMN (trigger_threshold, old, new , "trigger_threshold")
+	OVSDB_GET_COLUMN (enabled, old, new , "enabled")
+	OVSDB_GET_COLUMN (status, old, new , "status")
+
+	/* Name + hw_unit_id is key, if both are NULL don't update the cache.*/
+	if (name && hw_unit_id)
+	{
+	  /* Parse the Name and get bid, port, queue*/
+	  if (BVIEW_STATUS_SUCCESS != 
+	      bst_ovsdb_row_info_get (hw_unit_id->u.integer,
+		name->u.string, &bid,
+		&port, &queue))
+	  {
+	    continue;
+	  }
+	  if (counter_value && counter_value->type == JSON_INTEGER)
+	  {
+	    row.stat = counter_value->u.integer;
+	  }
+
+	  if (trigger_threshold && trigger_threshold->type == JSON_INTEGER)
+	  {
+	    row.threshold = trigger_threshold->u.integer;
+	  }
+	  else if (trigger_threshold && trigger_threshold->type == JSON_ARRAY)
+	  {
+	    default_threshold = true;
+	  }
+	  if (enabled)
+	  {
+	    row.enabled = (enabled->type == JSON_TRUE) ? true :false;
+	    if (row.enabled)
+	    {
+	      /* Get RealID*/
+	      if (BVIEW_STATUS_SUCCESS ==  
+		  bst_ovsdb_realm_id_get (bid_tab_params[bid].realm_name, 
+		    &realm_id))
+	      {
+		/* Check if already set ignore*/
+		if (!(trackMask & (1 << realm_id)))
+		{
+		  /* Acquire write lock*/
+		  SB_OVSDB_RWLOCK_WR_LOCK(p_cache->lock);
+		  /* set bit*/
+		  p_cache->config_data.trackingMask = (p_cache->config_data.trackingMask | (1 << realm_id));
+		  /* Release lock */
+		  SB_OVSDB_RWLOCK_UNLOCK(p_cache->lock);
+		  trackMask = (trackMask | (1 << realm_id));
+		}
+	      }
+	    }
+	  }
+	  /* Update BST cache*/
+	  bst_ovsdb_row_update (hw_unit_id->u.integer,
+	      bid, port, queue,
+	      default_threshold,
+	      &row);
+	  if (status && status->type == JSON_STRING)
+	  {
+	    if (strcmp("triggered", status->u.string) == 0)
+	    {
+	      bst_ovsdb_trigger_callback (hw_unit_id->u.integer,
+		  bid, port, queue);
+	    }
+	  }
+	}
     } /* if (strcmp (table_name, ..... */
     else if (strcmp (table_name,"System") ==0)
     {
@@ -353,27 +436,34 @@ bst_ovsdb_cache_update_table(const char *table_name, struct json *table_update,
       /* Validate UUID length*/
       if (strlen (node->name) !=  OVSDB_UUID_SIZE)
       {
-        SB_OVSDB_LOG (BVIEW_LOG_ERROR,
-               "OVSDB BST monitor: Invalid UUID length (%d)",
-                strlen (node->name));
-        continue;
-      }  
+	SB_OVSDB_LOG (BVIEW_LOG_ERROR,
+	    "OVSDB BST monitor: Invalid UUID length (%d)",
+	    strlen (node->name));
+	continue;
+      }
       /* COPY UUID*/
       strncpy (system_table_uuid, node->name, sizeof(system_table_uuid));
       OVSDB_GET_COLUMN (config, old, new, "bufmon_config");
       if (config)
       {
-        bst_system_bufmon_config_update (config);
+	bst_system_bufmon_config_update (config);
       }
-    } 
+    }
   } /* SHASH_FOR_EACH (node, json_object(table_update)) */
+
+  /* check if there is any diff in old and new track mask */
+  if (oldTrackMask != trackMask)
+  {
+    bst_notify_config_change (0, BVIEW_BST_CONFIG_TRACK_UPDATE);
+  } 
+
   if (strlen (system_table_uuid) > 0)
   {
     if (sem_post(&monitor_init_done_sem) != 0)
     {
-        SB_OVSDB_LOG (BVIEW_LOG_ERROR,
-               "OVSDB BST monitor: Failed to release semaphore");
-        return BVIEW_STATUS_FAILURE;
+      SB_OVSDB_LOG (BVIEW_LOG_ERROR,
+	  "OVSDB BST monitor: Failed to release semaphore");
+      return BVIEW_STATUS_FAILURE;
     }
   }
 
@@ -425,119 +515,6 @@ bst_ovsdb_cache_update(struct json *table_updates,
   }
   return BVIEW_STATUS_SUCCESS;
 }
-
-/*********************************************************************
-* @brief           Set default connection parameters                                 
-*
-* @param[in,out]   connectMode  - Connection Type 
-*
-* @notes
-*
-* @retval          none
-*
-*********************************************************************/
-
-void ovsdb_set_default(char * connectMode)
-{
-  if (connectMode != NULL)
-  {
-    strcpy(connectMode,_DEFAULT_OVSDB_SOCKET);
-  }
-  else
-  {
-    SB_OVSDB_LOG (BVIEW_LOG_ERROR,
-               "OVSDB Set Default : NULL Pointer\n");
-    return;
-  } 
-}	
-
-/*********************************************************************
-* @brief           Read OVSDB Config File                                 
-*
-* @param[in,out]   connectMode  - Connection Type 
-*
-* @notes
-*
-* @retval          BVIEW_STATUS_SUCCESS for successful execution
-*
-*********************************************************************/
-
-BVIEW_STATUS ovsdb_file_read(char * connectMode)
-{
-  FILE *configFile;
-  char line[OVSDB_CONFIG_MAX_LINE_LENGTH] = {0};
-  char line_copy[OVSDB_CONFIG_MAX_LINE_LENGTH] = {0};
-  int numLines = 0;
-  char *property,*value;
-  if (connectMode == NULL)
-  {
-    SB_OVSDB_LOG (BVIEW_LOG_ERROR,
-               "OVSDB File Read : NULL Pointer\n");
-    return BVIEW_STATUS_FAILURE;
-  }
-  configFile = fopen(OVSDB_CONFIG_FILE, OVSDB_CONFIG_READMODE);
-  if (configFile == NULL)
-  {
-    ovsdb_set_default(connectMode);
-    SB_OVSDB_LOG (BVIEW_LOG_ERROR,
-               "OVSDB File Read : Failed to open config file %s", 
-                OVSDB_CONFIG_FILE);
-    return BVIEW_STATUS_FAILURE;
-  }
-  else
-  { 
-    while (numLines < OVSDB_MAX_LINES)
-    {
-      memset (&line[0], 0, OVSDB_CONFIG_MAX_LINE_LENGTH);
-      memset (&line_copy[0], 0, OVSDB_CONFIG_MAX_LINE_LENGTH);
-      property= fgets(&line[0], OVSDB_CONFIG_MAX_LINE_LENGTH, configFile);
-      OVSDB_ASSERT_CONFIG_FILE_ERROR(property != NULL);
-      /*Ignoring commented line in config file*/
-      if (line[0] == '#')
-      {
-        numLines++;
-        continue;
-      }    
-      property = strtok(&line[0], OVSDB_CONFIG_DELIMITER);
-      OVSDB_ASSERT_CONFIG_FILE_ERROR(property != NULL);
-      value = property + strlen(property) + 1; 
-      if (strcmp(property, OVSDB_SOCKET) == 0)
-      {
-        value[strlen(value)] = 0;
-        strcpy(line_copy,value);
-        property = strtok(&value[0], OVSDB_CONFIG_MODE_DELIMITER);
-        OVSDB_ASSERT_CONFIG_FILE_ERROR(property != NULL);
-        if ((strcmp(property, OVSDB_MODE_TCP) == 0) || (strcmp(property, OVSDB_MODE_FILE) == 0))
-        {
-          strncpy(connectMode,line_copy,(strlen(line_copy) - 1));
-        }
-        else
-        {
-          SB_OVSDB_LOG (BVIEW_LOG_ERROR,
-                   "OVSDB File Read : Invalid content in config file %s", 
-                    OVSDB_CONFIG_FILE);
-          fclose(configFile);  
-          return BVIEW_STATUS_FAILURE;
-        } 
-        numLines++;
-        continue; 
-      }
-      else
-      {
-          SB_OVSDB_LOG (BVIEW_LOG_ERROR,
-                   "OVSDB File Read : Invalid content in config file %s", 
-                    OVSDB_CONFIG_FILE);
-          fclose(configFile);  
-          return BVIEW_STATUS_FAILURE;
-      }    
-    }
-  }  
-  SB_OVSDB_LOG (BVIEW_LOG_INFO,
-               "OVSDB File Read : File contents processed sucessfully. config file %s", 
-                OVSDB_CONFIG_FILE);
-  fclose(configFile);
-  return BVIEW_STATUS_SUCCESS;
-}
 /*********************************************************************
 * @brief   BST OVSDB monitor thread
 *
@@ -558,15 +535,14 @@ bst_ovsdb_monitor()
   int error;
   char connectMode[OVSDB_CONFIG_MAX_LINE_LENGTH];
   struct json *params;
-    
-    /* Open RPC Session*/
+  const char *sock_path;
+
+
+
+  /* Open RPC Session*/
   memset (&connectMode[0], 0, OVSDB_CONFIG_MAX_LINE_LENGTH);
-  if (ovsdb_file_read(connectMode) != BVIEW_STATUS_SUCCESS)
-  {
-    /*Set default connection mode*/
-    memset (&connectMode[0], 0, OVSDB_CONFIG_MAX_LINE_LENGTH);
-    ovsdb_set_default(connectMode);
-  }
+  sock_path = sbplugin_ovsdb_sock_path_get();
+  strncpy(connectMode, sock_path, OVSDB_CONFIG_MAX_LINE_LENGTH-1);
   rpc = open_jsonrpc (connectMode); 
   if (!rpc) 
   {
@@ -656,6 +632,7 @@ BVIEW_STATUS bst_ovsdb_threshold_commit (int asic , int port, int index,
   char connectMode[OVSDB_CONFIG_MAX_LINE_LENGTH]; 
   BVIEW_STATUS   rv = BVIEW_STATUS_SUCCESS;
   int error = 0;
+  const char *sock_path;
   
   /* Get Row name */
   rv = bst_bid_port_index_to_ovsdb_key (asic, bid, port, index, 
@@ -674,13 +651,9 @@ BVIEW_STATUS bst_ovsdb_threshold_commit (int asic , int port, int index,
   request = jsonrpc_create_request("transact", transaction, NULL);
   if (count == 0)
   { 
-  memset (&connectMode[0], 0, OVSDB_CONFIG_MAX_LINE_LENGTH);
-  if (ovsdb_file_read(connectMode) != BVIEW_STATUS_SUCCESS)
-  {
-    /*Set default connection mode*/
     memset (&connectMode[0], 0, OVSDB_CONFIG_MAX_LINE_LENGTH);
-    ovsdb_set_default(connectMode);
-  }
+    sock_path = sbplugin_ovsdb_sock_path_get();
+    strncpy(connectMode, sock_path, OVSDB_CONFIG_MAX_LINE_LENGTH-1);
     rpc = open_jsonrpc (connectMode);
     if (rpc == NULL)
     { 
@@ -716,31 +689,35 @@ BVIEW_STATUS bst_ovsdb_bst_config_commit (int asic ,
 {
   char   s_transact[1024] = {0};
   char   buf[16]          = {0};
+  char   buf1[16]          = {0};
   struct json *transaction;
   struct jsonrpc_msg *request, *reply;
   struct jsonrpc *rpc;
   char connectMode[OVSDB_CONFIG_MAX_LINE_LENGTH];
+  const char *sock_path;
  
   /* NULL Pointer validation */
   SB_OVSDB_NULLPTR_CHECK (config, BVIEW_STATUS_INVALID_PARAMETER);
 
   sprintf (buf, "%d",config->collection_interval);
-  /* Create JSON request*/ 
-  BST_OVSDB_FORM_CONFIG_JSON (s_transact, BST_OVSDB_CONFIG_JSON_FORMAT,
+  sprintf (buf1, "%d",config->bstMaxTriggers);
+  /* Create JSON request*/
+  BVIEW_OVSDB_FORM_CONFIG_JSON (s_transact, BST_OVSDB_CONFIG_JSON_FORMAT,
                               (config->bst_enable ? "True":"False"),
                               ((config->bst_tracking_mode == BVIEW_BST_MODE_PEAK) ? "peak":"current"),
-                              (config->periodic_collection ? "True":"False"), 
+                              (config->periodic_collection ? "True":"False"),
+                              (config->sendSnapshotOnTrigger ? "True":"False"),
+                              buf,
+                              buf1 ,
+                              (config->triggerCollectionEnabled ? "True":"False"),
                               system_table_uuid);
-                                  
+
   transaction = json_from_string(s_transact);
   request = jsonrpc_create_request("transact", transaction, NULL);
   memset (&connectMode[0], 0, OVSDB_CONFIG_MAX_LINE_LENGTH);
-  if (ovsdb_file_read(connectMode) != BVIEW_STATUS_SUCCESS)
-  {
-    /*Set default connection mode*/
-    memset (&connectMode[0], 0, OVSDB_CONFIG_MAX_LINE_LENGTH);
-    ovsdb_set_default(connectMode);
-  } 
+  sock_path = sbplugin_ovsdb_sock_path_get();
+  strncpy(connectMode, sock_path, OVSDB_CONFIG_MAX_LINE_LENGTH-1);
+
   rpc = open_jsonrpc (connectMode);
   if (rpc == NULL)
   { 
@@ -754,4 +731,165 @@ BVIEW_STATUS bst_ovsdb_bst_config_commit (int asic ,
   return BVIEW_STATUS_SUCCESS;
 }
 
+
+/*********************************************************************
+* @brief   Commit Column 'enabled' in bufmon table
+*
+* @param[in]   asic              -   ASIC ID
+* @param[in]   config            -   Pointer to BST config Data.
+*
+* @retval
+*
+* @notes
+*
+*
+*
+*********************************************************************/
+BVIEW_STATUS bst_ovsdb_bst_tracking_commit (int asic ,
+                                          BVIEW_OVSDB_CONFIG_DATA_t *config)
+{
+  char   s_transact[1024] = {0};
+  struct json *transaction;
+  struct jsonrpc_msg *request;
+  struct jsonrpc *rpc;
+  char connectMode[OVSDB_CONFIG_MAX_LINE_LENGTH];
+  int realmId;
+  char  realmName[BST_OVSDB_REALM_SIZE];
+  const char *sock_path;
+
+  /* NULL Pointer validation */
+  SB_OVSDB_NULLPTR_CHECK (config, BVIEW_STATUS_INVALID_PARAMETER);
+
+  memset (&connectMode[0], 0, OVSDB_CONFIG_MAX_LINE_LENGTH);
+  sock_path = sbplugin_ovsdb_sock_path_get();
+  strncpy(connectMode, sock_path, OVSDB_CONFIG_MAX_LINE_LENGTH-1);
+
+  rpc = open_jsonrpc (connectMode);
+  if (rpc == NULL)
+  {
+    SB_OVSDB_LOG (BVIEW_LOG_ERROR,
+                 "System config commit:Failed to open JSNON RPC session");
+    return BVIEW_STATUS_FAILURE;
+  }
+  for (realmId = BVIEW_BST_REALM_ID_MIN;
+       realmId < BVIEW_BST_REALM_ID_MAX;realmId++)
+  {
+    if(config->trackingMask & (1 <<realmId))
+    {
+      bst_ovsdb_realm_name_get (realmId, realmName);
+      sprintf (s_transact, BST_JSON_TRACKING_FORMAT ,"true",realmName);
+      transaction = json_from_string(s_transact);
+      request = jsonrpc_create_request("transact", transaction, NULL);
+      jsonrpc_send (rpc, request);
+    }
+    else
+    {
+      bst_ovsdb_realm_name_get (realmId, realmName);
+      sprintf (s_transact, BST_JSON_TRACKING_FORMAT ,"false", realmName);
+      transaction = json_from_string(s_transact);
+      request = jsonrpc_create_request("transact", transaction, NULL);
+      jsonrpc_send (rpc, request);
+    }
+  }
+  if (config->trackingMask & (1 << (BVIEW_BST_REALM_ID_MAX-1)))
+  {
+    bst_ovsdb_realm_name_get ((BVIEW_BST_REALM_ID_MAX-1), realmName);
+    sprintf (s_transact, BST_JSON_TRACKING_FORMAT ,"true",realmName);
+  }
+  else
+  {
+    bst_ovsdb_realm_name_get ((BVIEW_BST_REALM_ID_MAX-1), realmName);
+    sprintf (s_transact, BST_JSON_TRACKING_FORMAT ,"false",realmName);
+  }
+
+  transaction = json_from_string(s_transact);
+  request = jsonrpc_create_request("transact", transaction, NULL);
+  jsonrpc_send_block (rpc, request);
+
+  return BVIEW_STATUS_SUCCESS;
+}
+
+
+/*********************************************************************
+* @brief       Commit column "trigger_threshold" in table "bufmon" to
+*              Zero.
+*
+* @param[in]   asic             -  ASIC ID
+*
+* @notes
+*
+*
+*
+*********************************************************************/
+BVIEW_STATUS bst_ovsdb_clear_thresholds_commit (int asic)
+{
+  char   s_transact[1024] = {0};
+  struct json *transaction;
+  struct jsonrpc_msg *request, *reply;
+  char connectMode[OVSDB_CONFIG_MAX_LINE_LENGTH];
+  const char *sock_path;
+
+   /* Create JSON Request*/
+  sprintf (s_transact, BST_OVSDB_CLEAR_THRESHOLDS_JSON ,asic);
+
+  transaction = json_from_string(s_transact);
+  request = jsonrpc_create_request("transact", transaction, NULL);
+  memset (&connectMode[0], 0, OVSDB_CONFIG_MAX_LINE_LENGTH);
+  sock_path = sbplugin_ovsdb_sock_path_get();
+  strncpy(connectMode, sock_path, OVSDB_CONFIG_MAX_LINE_LENGTH-1);
+
+  rpc = open_jsonrpc (connectMode);
+  if (rpc == NULL)
+  {
+    SB_OVSDB_LOG (BVIEW_LOG_ERROR,
+                 "clear thresholds commit:Failed to open JSNON RPC session");
+    return BVIEW_STATUS_FAILURE;
+  }
+  check_txn(jsonrpc_transact_block(rpc, request, &reply),&reply);
+  jsonrpc_msg_destroy(reply);
+  jsonrpc_close(rpc);
+  return BVIEW_STATUS_SUCCESS;
+}
+
+
+/*********************************************************************
+* @brief       Commit Clear Stats to OVSDB.
+*              .
+*
+* @param[in]   asic             -  ASIC ID
+*
+* @notes       Set all Stats to Zero
+*
+*
+*
+*********************************************************************/
+BVIEW_STATUS bst_ovsdb_clear_stats_commit (int asic)
+{
+  char   s_transact[1024] = {0};
+  struct json *transaction;
+  struct jsonrpc_msg *request, *reply;
+  char connectMode[OVSDB_CONFIG_MAX_LINE_LENGTH];
+  const char *sock_path;
+
+   /* Create JSON Request*/
+  sprintf (s_transact, BST_OVSDB_CLEAR_STATS_JSON ,asic);
+
+  transaction = json_from_string(s_transact);
+  request = jsonrpc_create_request("transact", transaction, NULL);
+  memset (&connectMode[0], 0, OVSDB_CONFIG_MAX_LINE_LENGTH);
+  sock_path = sbplugin_ovsdb_sock_path_get();
+  strncpy(connectMode, sock_path, OVSDB_CONFIG_MAX_LINE_LENGTH-1);
+
+  rpc = open_jsonrpc (connectMode);
+  if (rpc == NULL)
+  {
+    SB_OVSDB_LOG (BVIEW_LOG_ERROR,
+                 "Clear stats commit:Failed to open JSNON RPC session");
+    return BVIEW_STATUS_FAILURE;
+  }
+  check_txn(jsonrpc_transact_block(rpc, request, &reply),&reply);
+  jsonrpc_msg_destroy(reply);
+  jsonrpc_close(rpc);
+  return BVIEW_STATUS_SUCCESS;
+}
 
