@@ -207,7 +207,7 @@ BVIEW_STATUS bst_config_feature_set (BVIEW_BST_REQUEST_MSG_t * msg_data)
 
  /* Set the asic with the desired config to control bst */  
   bstMode.enableStatsMonitoring = msg_data->request.config.bstEnable;
-  bstMode.enablePeriodicCollection = ptr->sendAsyncReports;
+  bstMode.enablePeriodicCollection = true;
   bstMode.collectionPeriod = ptr->collectionInterval;
   bstMode.bstMaxTriggers = ptr->bstMaxTriggers;
   bstMode.sendSnapshotOnTrigger = ptr->sendSnapshotOnTrigger;
@@ -387,7 +387,7 @@ BVIEW_STATUS bst_config_track_set (BVIEW_BST_REQUEST_MSG_t * msg_data)
   bstMode.mode = trackPeakStats;
   bstMode.trackMask = msg_data->request.track.trackMask;
 
-  bstMode.enablePeriodicCollection =  config_ptr->sendAsyncReports;
+  bstMode.enablePeriodicCollection =  true;
   bstMode.collectionPeriod =  config_ptr->collectionInterval;
   bstMode.bstMaxTriggers =  config_ptr->bstMaxTriggers;
   bstMode.sendSnapshotOnTrigger = config_ptr->sendSnapshotOnTrigger;
