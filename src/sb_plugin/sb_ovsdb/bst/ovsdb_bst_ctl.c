@@ -218,40 +218,40 @@ bst_system_bufmon_config_update (struct json *json_object)
       value = json_array (sub_array)->elems[1];
       if (strcmp (key->u.string, "counters_mode") == 0)
       {
-	temp.bst_tracking_mode = bufmon_config->bst_tracking_mode;
-	bufmon_config->bst_tracking_mode = 
-	  ((strcmp (value->u.string, "peak") == 0)? BVIEW_BST_MODE_PEAK : BVIEW_BST_MODE_CURRENT);
+        temp.bst_tracking_mode = bufmon_config->bst_tracking_mode;
+        bufmon_config->bst_tracking_mode = 
+         ((strcmp (value->u.string, "peak") == 0)? BVIEW_BST_MODE_PEAK : BVIEW_BST_MODE_CURRENT);
       }
       else if (strcmp (key->u.string, "enabled") ==0)
       {
-	temp.bst_enable = bufmon_config->bst_enable;
-	bufmon_config->bst_enable = 
-	  ((strcmp (value->u.string, "true") == 0)? true : false); 
-	if (bufmon_config->bst_enable != temp.bst_enable)
-	{
-	  bufmon_config->bst_enable = true;
-	  updated = true;
-	} 
+        temp.bst_enable = bufmon_config->bst_enable;
+        bufmon_config->bst_enable = 
+        ((strcmp (value->u.string, "true") == 0)? true : false); 
+        if (bufmon_config->bst_enable != temp.bst_enable)
+        {
+          bufmon_config->bst_enable = true;
+          updated = true;
+        } 
       }
       else if (strcmp (key->u.string, "periodic_collection_enabled") ==0)
       {
-	temp.periodic_collection = bufmon_config->periodic_collection;
-	bufmon_config->periodic_collection  =
-	  ((strcmp (value->u.string, "true") == 0)? true : false);
-	if (bufmon_config->periodic_collection != temp.periodic_collection)
-	{
-	  updated = true;
-	}
+        temp.periodic_collection = bufmon_config->periodic_collection;
+        bufmon_config->periodic_collection  =
+        ((strcmp (value->u.string, "true") == 0)? true : false);
+        if (bufmon_config->periodic_collection != temp.periodic_collection)
+        {
+          updated = true;
+        }
       }
       else if (strcmp (key->u.string, "collection_period") ==0) 
       {
-	temp.collection_interval = bufmon_config->collection_interval;
-	bufmon_config->collection_interval = atoi(value->u.string);
+        temp.collection_interval = bufmon_config->collection_interval;
+        bufmon_config->collection_interval = atoi(value->u.string);
 
-	if (bufmon_config->collection_interval != temp.collection_interval)
-	{
-	  updated = true;
-	}
+        if (bufmon_config->collection_interval != temp.collection_interval)
+        {
+          updated = true;
+        }
       }
       else if (strcmp (key->u.string, "threshold_trigger_collection_enabled") ==0)
       {
@@ -259,9 +259,9 @@ bst_system_bufmon_config_update (struct json *json_object)
         bufmon_config->triggerCollectionEnabled  =
                ((strcmp (value->u.string, "true") == 0)? true : false);
         if (temp.triggerCollectionEnabled != bufmon_config->triggerCollectionEnabled)
-	{
-	  updated = true;
-	}
+        {
+          updated = true;
+        }
       }
       else if (strcmp (key->u.string, "snapshot_on_threshold_trigger") ==0)
       {
@@ -270,18 +270,18 @@ bst_system_bufmon_config_update (struct json *json_object)
                ((strcmp (value->u.string, "true") == 0)? true : false);
 
         if (temp.sendSnapshotOnTrigger != bufmon_config->sendSnapshotOnTrigger)
-	{
-	  updated = true;
-	}
+        {
+          updated = true;
+        }
       }
       else if (strcmp (key->u.string, "threshold_trigger_rate_limit") == 0)
       {
         temp.bstMaxTriggers = bufmon_config->bstMaxTriggers;
          bufmon_config->bstMaxTriggers = atoi(value->u.string);
         if (temp.bstMaxTriggers != bufmon_config->bstMaxTriggers)
-	{
-	  updated = true;
-	}
+        {
+          updated = true;
+        }
       }
     }
   }
@@ -317,7 +317,8 @@ bst_ovsdb_cache_update_table(const char *table_name, struct json *table_update,
   BVIEW_OVSDB_BST_DATA_t     *p_cache = NULL;
   int                         trackMask = 0;
   int                         oldTrackMask = 0;
-
+  static bool sys_cache_init_done = false;
+  static bool bufmon_cache_init_done = false;
 
   /* NULL Pointer validation*/
   SB_OVSDB_NULLPTR_CHECK (table_update, BVIEW_STATUS_INVALID_PARAMETER);
@@ -360,96 +361,98 @@ bst_ovsdb_cache_update_table(const char *table_name, struct json *table_update,
     if (strcmp (table_name, "bufmon") == 0)
     {
       OVSDB_GET_COLUMN (hw_unit_id, old, new , "hw_unit_id")
-	OVSDB_GET_COLUMN (name, old, new , "name")
-	OVSDB_GET_COLUMN (counter_value, old, new , "counter_value")
-	OVSDB_GET_COLUMN (trigger_threshold, old, new , "trigger_threshold")
-	OVSDB_GET_COLUMN (enabled, old, new , "enabled")
-	OVSDB_GET_COLUMN (status, old, new , "status")
+      OVSDB_GET_COLUMN (name, old, new , "name")
+      OVSDB_GET_COLUMN (counter_value, old, new , "counter_value")
+      OVSDB_GET_COLUMN (trigger_threshold, old, new , "trigger_threshold")
+      OVSDB_GET_COLUMN (enabled, old, new , "enabled")
+      OVSDB_GET_COLUMN (status, old, new , "status")
 
-	/* Name + hw_unit_id is key, if both are NULL don't update the cache.*/
-	if (name && hw_unit_id)
-	{
-	  /* Parse the Name and get bid, port, queue*/
-	  if (BVIEW_STATUS_SUCCESS != 
-	      bst_ovsdb_row_info_get (hw_unit_id->u.integer,
-		name->u.string, &bid,
-		&port, &queue))
-	  {
-	    continue;
-	  }
-	  if (counter_value && counter_value->type == JSON_INTEGER)
-	  {
-	    row.stat = counter_value->u.integer;
-	  }
-
-	  if (trigger_threshold && trigger_threshold->type == JSON_INTEGER)
-	  {
-	    row.threshold = trigger_threshold->u.integer;
-	  }
-	  else if (trigger_threshold && trigger_threshold->type == JSON_ARRAY)
-	  {
-	    default_threshold = true;
-	  }
-	  if (enabled)
-	  {
-	    row.enabled = (enabled->type == JSON_TRUE) ? true :false;
-	    if (row.enabled)
-	    {
-	      /* Get RealID*/
-	      if (BVIEW_STATUS_SUCCESS ==  
-		  bst_ovsdb_realm_id_get (bid_tab_params[bid].realm_name, 
-		    &realm_id))
-	      {
-		/* Check if already set ignore*/
-		if (!(trackMask & (1 << realm_id)))
-		{
-		  /* Acquire write lock*/
-		  SB_OVSDB_RWLOCK_WR_LOCK(p_cache->lock);
-		  /* set bit*/
-		  p_cache->config_data.trackingMask = (p_cache->config_data.trackingMask | (1 << realm_id));
-		  /* Release lock */
-		  SB_OVSDB_RWLOCK_UNLOCK(p_cache->lock);
-		  trackMask = (trackMask | (1 << realm_id));
-		}
-	      }
-	    }
-	  }
-	  /* Update BST cache*/
-	  bst_ovsdb_row_update (hw_unit_id->u.integer,
-	      bid, port, queue,
-	      default_threshold,
-	      &row);
-	  if (status && status->type == JSON_STRING)
-	  {
-	    if (strcmp("triggered", status->u.string) == 0)
-	    {
-	      bst_ovsdb_trigger_callback (hw_unit_id->u.integer,
-		  bid, port, queue);
-	    }
-	  }
-	}
-    } /* if (strcmp (table_name, ..... */
-    else if (strcmp (table_name,"System") ==0)
-    {
-      struct json *config;
-
-      /* Validate UUID length*/
-      if (strlen (node->name) !=  OVSDB_UUID_SIZE)
+      /* Name + hw_unit_id is key, if both are NULL don't update the cache.*/
+      if (name && hw_unit_id)
       {
-	SB_OVSDB_LOG (BVIEW_LOG_ERROR,
-	    "OVSDB BST monitor: Invalid UUID length (%d)",
-	    strlen (node->name));
-	continue;
+        /* Parse the Name and get bid, port, queue*/
+        if (BVIEW_STATUS_SUCCESS != 
+              bst_ovsdb_row_info_get (hw_unit_id->u.integer,
+              name->u.string, &bid,
+              &port, &queue))
+        {
+          continue;
+        }
+        if (counter_value && counter_value->type == JSON_INTEGER)
+        {
+          row.stat = counter_value->u.integer;
+        }
+
+        if (trigger_threshold && trigger_threshold->type == JSON_INTEGER)
+        {
+          row.threshold = trigger_threshold->u.integer;
+        }
+        else if (trigger_threshold && trigger_threshold->type == JSON_ARRAY)
+        {
+          default_threshold = true;
+        }
+        if (enabled)
+        {
+          row.enabled = (enabled->type == JSON_TRUE) ? true :false;
+          if (row.enabled)
+          {
+            /* Get RealID*/
+            if (BVIEW_STATUS_SUCCESS ==  
+              bst_ovsdb_realm_id_get (bid_tab_params[bid].realm_name, 
+               &realm_id))
+            {
+              /* Check if already set ignore*/
+              if (!(trackMask & (1 << realm_id)))
+              {
+                /* Acquire write lock*/
+                SB_OVSDB_RWLOCK_WR_LOCK(p_cache->lock);
+                /* set bit*/
+                p_cache->config_data.trackingMask = (p_cache->config_data.trackingMask | (1 << realm_id));
+                /* Release lock */
+               SB_OVSDB_RWLOCK_UNLOCK(p_cache->lock);
+               trackMask = (trackMask | (1 << realm_id));
+             }
+           }
+        }
       }
-      /* COPY UUID*/
-      strncpy (system_table_uuid, node->name, sizeof(system_table_uuid));
-      OVSDB_GET_COLUMN (config, old, new, "bufmon_config");
-      if (config)
+      /* Update BST cache*/
+      bst_ovsdb_row_update (hw_unit_id->u.integer,
+          bid, port, queue,
+          default_threshold,
+          &row);
+          bufmon_cache_init_done = true;
+      if (status && status->type == JSON_STRING)
       {
-	bst_system_bufmon_config_update (config);
+        if (strcmp("triggered", status->u.string) == 0)
+        {
+          bst_ovsdb_trigger_callback (hw_unit_id->u.integer,
+            bid, port, queue);
+        }
       }
-    }
-  } /* SHASH_FOR_EACH (node, json_object(table_update)) */
+     }
+   } /* if (strcmp (table_name, ..... */
+   else if (strcmp (table_name,"System") ==0)
+   {
+     struct json *config;
+
+     /* Validate UUID length*/
+     if (strlen (node->name) !=  OVSDB_UUID_SIZE)
+     {
+       SB_OVSDB_LOG (BVIEW_LOG_ERROR,
+        "OVSDB BST monitor: Invalid UUID length (%d)",
+        strlen (node->name));
+       continue;
+     }
+     /* COPY UUID*/
+     strncpy (system_table_uuid, node->name, sizeof(system_table_uuid));
+     OVSDB_GET_COLUMN (config, old, new, "bufmon_config");
+     if (config)
+     {
+       bst_system_bufmon_config_update (config);
+       sys_cache_init_done = true;
+     }
+   }
+ } /* SHASH_FOR_EACH (node, json_object(table_update)) */
 
   /* check if there is any diff in old and new track mask */
   if (oldTrackMask != trackMask)
@@ -459,11 +462,14 @@ bst_ovsdb_cache_update_table(const char *table_name, struct json *table_update,
 
   if (strlen (system_table_uuid) > 0)
   {
-    if (sem_post(&monitor_init_done_sem) != 0)
+    if (sys_cache_init_done && bufmon_cache_init_done)
     {
-      SB_OVSDB_LOG (BVIEW_LOG_ERROR,
-	  "OVSDB BST monitor: Failed to release semaphore");
-      return BVIEW_STATUS_FAILURE;
+      if (sem_post(&monitor_init_done_sem) != 0)
+      {
+        SB_OVSDB_LOG (BVIEW_LOG_ERROR,
+           "OVSDB BST monitor: Failed to release semaphore");
+        return BVIEW_STATUS_FAILURE;
+      }
     }
   }
 
@@ -606,7 +612,6 @@ bst_ovsdb_monitor()
 }
 
 int count  = 0;
-static struct jsonrpc *rpc;
 /*********************************************************************
 * @brief       Commit column "trigger_threshold" in table "bufmon" to 
 *              OVSDB database.
@@ -630,10 +635,14 @@ BVIEW_STATUS bst_ovsdb_threshold_commit (int asic , int port, int index,
   struct json *transaction;
   struct jsonrpc_msg *request;
   char connectMode[OVSDB_CONFIG_MAX_LINE_LENGTH]; 
+  static struct jsonrpc *rpc = NULL;
   BVIEW_STATUS   rv = BVIEW_STATUS_SUCCESS;
   int error = 0;
   const char *sock_path;
-  
+  if (0 == count)
+  {
+    rpc = NULL;
+  }
   /* Get Row name */
   rv = bst_bid_port_index_to_ovsdb_key (asic, bid, port, index, 
                                         s_key, sizeof(s_key));
@@ -826,6 +835,7 @@ BVIEW_STATUS bst_ovsdb_clear_thresholds_commit (int asic)
   char   s_transact[1024] = {0};
   struct json *transaction;
   struct jsonrpc_msg *request, *reply;
+  struct jsonrpc *rpc;
   char connectMode[OVSDB_CONFIG_MAX_LINE_LENGTH];
   const char *sock_path;
 
@@ -868,6 +878,7 @@ BVIEW_STATUS bst_ovsdb_clear_stats_commit (int asic)
   char   s_transact[1024] = {0};
   struct json *transaction;
   struct jsonrpc_msg *request, *reply;
+  struct jsonrpc *rpc;
   char connectMode[OVSDB_CONFIG_MAX_LINE_LENGTH];
   const char *sock_path;
 
