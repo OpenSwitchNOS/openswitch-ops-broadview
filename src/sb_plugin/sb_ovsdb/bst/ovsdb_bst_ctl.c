@@ -703,13 +703,13 @@ BVIEW_STATUS bst_ovsdb_bst_config_commit (int asic ,
   sprintf (buf1, "%d",config->bstMaxTriggers);
   /* Create JSON request*/
   BVIEW_OVSDB_FORM_CONFIG_JSON (s_transact, BST_OVSDB_CONFIG_JSON_FORMAT,
-                              (config->bst_enable ? "True":"False"),
+                              (config->bst_enable ? "true":"false"),
                               ((config->bst_tracking_mode == BVIEW_BST_MODE_PEAK) ? "peak":"current"),
-                              (config->periodic_collection ? "True":"False"),
-                              (config->sendSnapshotOnTrigger ? "True":"False"),
+                              (config->periodic_collection ? "true":"false"),
+                              (config->sendSnapshotOnTrigger ? "true":"false"),
                               buf,
                               buf1 ,
-                              (config->triggerCollectionEnabled ? "True":"False"),
+                              (config->triggerCollectionEnabled ? "true":"false"),
                               system_table_uuid);
 
   transaction = json_from_string(s_transact);
