@@ -259,6 +259,7 @@ BVIEW_STATUS sbplugin_ovsdb_bst_config_set (int asic, BVIEW_BST_CONFIG_t *data)
   config.sendSnapshotOnTrigger  = data->sendSnapshotOnTrigger;
   config.trackingMask = data->trackMask;
   config.trackInit = data->trackInit;
+  config.triggerCollectionEnabled = true;
 
   /* Prepare of MASK of ream's enabled for tracking*/ 
 /*  sbplugin_ovsdb_realm_mask (data, &config); */

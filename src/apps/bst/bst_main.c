@@ -535,6 +535,7 @@ BVIEW_STATUS bst_app_config_init (unsigned int num_units)
     bstMode.enableDeviceStatsMonitoring = BVIEW_BST_DEFAULT_TRACK_DEVICE;
     bstMode.enableIngressStatsMonitoring = BVIEW_BST_DEFAULT_TRACK_INGRESS;
     bstMode.enableEgressStatsMonitoring = BVIEW_BST_DEFAULT_TRACK_EGRESS;
+    bstMode.enablePeriodicCollection = true;
     if(true == ptr->track.trackPeakStats)
     {
       bstMode.mode = BVIEW_BST_MODE_PEAK;

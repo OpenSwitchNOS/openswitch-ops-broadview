@@ -226,7 +226,7 @@ bst_system_bufmon_config_update (struct json *json_object)
       {
 	temp.bst_enable = bufmon_config->bst_enable;
 	bufmon_config->bst_enable = 
-	  ((strcmp (value->u.string, "True") == 0)? true : false); 
+	  ((strcmp (value->u.string, "true") == 0)? true : false); 
 	if (bufmon_config->bst_enable != temp.bst_enable)
 	{
 	  bufmon_config->bst_enable = true;
@@ -237,7 +237,7 @@ bst_system_bufmon_config_update (struct json *json_object)
       {
 	temp.periodic_collection = bufmon_config->periodic_collection;
 	bufmon_config->periodic_collection  =
-	  ((strcmp (value->u.string, "True") == 0)? true : false);
+	  ((strcmp (value->u.string, "true") == 0)? true : false);
 	if (bufmon_config->periodic_collection != temp.periodic_collection)
 	{
 	  updated = true;
@@ -257,7 +257,7 @@ bst_system_bufmon_config_update (struct json *json_object)
       {
         temp.triggerCollectionEnabled = bufmon_config->triggerCollectionEnabled;
         bufmon_config->triggerCollectionEnabled  =
-               ((strcmp (value->u.string, "True") == 0)? true : false);
+               ((strcmp (value->u.string, "true") == 0)? true : false);
         if (temp.triggerCollectionEnabled != bufmon_config->triggerCollectionEnabled)
 	{
 	  updated = true;
@@ -267,7 +267,7 @@ bst_system_bufmon_config_update (struct json *json_object)
       {
        temp.sendSnapshotOnTrigger = bufmon_config->sendSnapshotOnTrigger;
         bufmon_config->sendSnapshotOnTrigger  =
-               ((strcmp (value->u.string, "True") == 0)? true : false);
+               ((strcmp (value->u.string, "true") == 0)? true : false);
 
         if (temp.sendSnapshotOnTrigger != bufmon_config->sendSnapshotOnTrigger)
 	{
@@ -703,13 +703,13 @@ BVIEW_STATUS bst_ovsdb_bst_config_commit (int asic ,
   sprintf (buf1, "%d",config->bstMaxTriggers);
   /* Create JSON request*/
   BVIEW_OVSDB_FORM_CONFIG_JSON (s_transact, BST_OVSDB_CONFIG_JSON_FORMAT,
-                              (config->bst_enable ? "True":"False"),
+                              (config->bst_enable ? "true":"false"),
                               ((config->bst_tracking_mode == BVIEW_BST_MODE_PEAK) ? "peak":"current"),
-                              (config->periodic_collection ? "True":"False"),
-                              (config->sendSnapshotOnTrigger ? "True":"False"),
+                              (config->periodic_collection ? "true":"false"),
+                              (config->sendSnapshotOnTrigger ? "true":"false"),
                               buf,
                               buf1 ,
-                              (config->triggerCollectionEnabled ? "True":"False"),
+                              (config->triggerCollectionEnabled ? "true":"false"),
                               system_table_uuid);
 
   transaction = json_from_string(s_transact);
