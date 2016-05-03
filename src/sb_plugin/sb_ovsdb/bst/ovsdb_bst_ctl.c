@@ -606,7 +606,6 @@ bst_ovsdb_monitor()
 }
 
 int count  = 0;
-static struct jsonrpc *rpc;
 /*********************************************************************
 * @brief       Commit column "trigger_threshold" in table "bufmon" to 
 *              OVSDB database.
@@ -629,11 +628,18 @@ BVIEW_STATUS bst_ovsdb_threshold_commit (int asic , int port, int index,
   char   s_key[1024]       = {0};
   struct json *transaction;
   struct jsonrpc_msg *request;
+  static struct jsonrpc *rpc;
   char connectMode[OVSDB_CONFIG_MAX_LINE_LENGTH]; 
   BVIEW_STATUS   rv = BVIEW_STATUS_SUCCESS;
   int error = 0;
   const char *sock_path;
-  
+ 
+
+  if (0 == count)
+  {
+    rpc = NULL;
+  }
+ 
   /* Get Row name */
   rv = bst_bid_port_index_to_ovsdb_key (asic, bid, port, index, 
                                         s_key, sizeof(s_key));
@@ -826,6 +832,7 @@ BVIEW_STATUS bst_ovsdb_clear_thresholds_commit (int asic)
   char   s_transact[1024] = {0};
   struct json *transaction;
   struct jsonrpc_msg *request, *reply;
+  struct jsonrpc *rpc;
   char connectMode[OVSDB_CONFIG_MAX_LINE_LENGTH];
   const char *sock_path;
 
@@ -868,6 +875,7 @@ BVIEW_STATUS bst_ovsdb_clear_stats_commit (int asic)
   char   s_transact[1024] = {0};
   struct json *transaction;
   struct jsonrpc_msg *request, *reply;
+  struct jsonrpc *rpc;
   char connectMode[OVSDB_CONFIG_MAX_LINE_LENGTH];
   const char *sock_path;
 
