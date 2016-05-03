@@ -583,8 +583,10 @@ BVIEW_STATUS  bst_ovsdb_trigger_callback (int asic,
   sprintf (triggerInfo.counter, "%s", bid_tab_params[bid].counter_name);
   triggerInfo.port = port;
   triggerInfo.queue = queue;  
-  
-  trigger_callback (asic, trigger_cookie, &triggerInfo);
+  if (trigger_callback)
+  {  
+    trigger_callback (asic, trigger_cookie, &triggerInfo);
+  }
   return BVIEW_STATUS_SUCCESS;
 }
 

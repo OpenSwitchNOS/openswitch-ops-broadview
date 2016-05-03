@@ -110,10 +110,12 @@ BVIEW_STATUS bst_enable_on_trigger(BVIEW_BST_REQUEST_MSG_t *msg_data, int bstEna
   }
 
   memset (&bstMode, 0, sizeof (BVIEW_BST_CONFIG_t));
+  /* get the current values*/
+  sbapi_bst_config_get (msg_data->unit, &bstMode);
+
   bstMode.enableDeviceStatsMonitoring = BVIEW_BST_DEFAULT_TRACK_DEVICE;
   bstMode.enableIngressStatsMonitoring = BVIEW_BST_DEFAULT_TRACK_INGRESS;
   bstMode.enableEgressStatsMonitoring = BVIEW_BST_DEFAULT_TRACK_EGRESS;
-  bstMode.mode = BVIEW_BST_MODE_CURRENT;
   bstMode.enableStatsMonitoring = true;
   /* Set the asic with the desired config to control bst */
   rv = sbapi_bst_config_set (msg_data->unit, &bstMode);
