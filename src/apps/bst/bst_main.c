@@ -436,7 +436,7 @@ BVIEW_STATUS bst_app_config_init (unsigned int num_units)
     /* stats in cells or bytes.  */
     ptr->config.bstEnable = BVIEW_BST_DEFAULT_ENABLE;
     ptr->config.sendAsyncReports = BVIEW_BST_PERIODIC_REPORT_DEFAULT;
-    ptr->config.collectionInterval = bstMode.collectionPeriod;
+    ptr->config.collectionInterval = BVIEW_BST_DEFAULT_INTERVAL;
     ptr->config.statUnitsInCells = BVIEW_BST_DEFAULT_STATS_UNITS;
     ptr->config.bstMaxTriggers = BVIEW_BST_DEFAULT_MAX_TRIGGERS;
     ptr->config.sendSnapshotOnTrigger = BVIEW_BST_DEFAULT_SNAPSHOT_TRIGGER;
@@ -464,7 +464,7 @@ BVIEW_STATUS bst_app_config_init (unsigned int num_units)
     bstMode.enableStatsMonitoring = ptr->config.bstEnable;
     bstMode.mode = BVIEW_BST_DEFAULT_TRACK_MODE;
     bstMode.enablePeriodicCollection = true;
-    bstMode.collectionPeriod = ptr->config.collectionInterval; 
+    bstMode.collectionPeriod = BVIEW_BST_DEFAULT_PLUGIN_INTERVAL;
     bstMode.bstMaxTriggers = ptr->config.bstMaxTriggers; 
     bstMode.sendSnapshotOnTrigger = ptr->config.sendSnapshotOnTrigger;
 
@@ -479,11 +479,6 @@ BVIEW_STATUS bst_app_config_init (unsigned int num_units)
     if (bstMode.enableStatsMonitoring != ptr->config.bstEnable)
     {
       ptr->config.bstEnable = bstMode.enableStatsMonitoring;
-    }
-    /* collection interval  */
-    if (bstMode.collectionPeriod != ptr->config.collectionInterval)
-    {
-      ptr->config.collectionInterval = bstMode.collectionPeriod;
     }
 
     if (bstMode.bstMaxTriggers != ptr->config.bstMaxTriggers)
@@ -536,6 +531,7 @@ BVIEW_STATUS bst_app_config_init (unsigned int num_units)
     bstMode.enableIngressStatsMonitoring = BVIEW_BST_DEFAULT_TRACK_INGRESS;
     bstMode.enableEgressStatsMonitoring = BVIEW_BST_DEFAULT_TRACK_EGRESS;
     bstMode.enablePeriodicCollection = true;
+    bstMode.collectionPeriod = BVIEW_BST_DEFAULT_PLUGIN_INTERVAL;
     if(true == ptr->track.trackPeakStats)
     {
       bstMode.mode = BVIEW_BST_MODE_PEAK;

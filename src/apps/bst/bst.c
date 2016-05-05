@@ -82,6 +82,7 @@ BVIEW_STATUS bst_config_feature_set (BVIEW_BST_REQUEST_MSG_t * msg_data)
   BVIEW_BST_CONFIG_PARAMS_t *ptr;
   bool timerUpdateReqd = false;
   int tmpMask = 0;
+  int interval = BVIEW_BST_DEFAULT_PLUGIN_INTERVAL;
 
   /* check for the null of the input pointer */
   if (NULL == msg_data)
@@ -181,6 +182,16 @@ BVIEW_STATUS bst_config_feature_set (BVIEW_BST_REQUEST_MSG_t * msg_data)
     ptr->statsInPercentage = msg_data->request.config.statsInPercentage;
   }
 
+  if ((0 == ptr->collectionInterval) || 
+      (ptr->collectionInterval > BVIEW_BST_DEFAULT_PLUGIN_INTERVAL))
+  {
+    interval = BVIEW_BST_DEFAULT_PLUGIN_INTERVAL;
+  }
+  else
+  {
+    interval = ptr->collectionInterval;
+  }
+
 
   BST_RWLOCK_UNLOCK(msg_data->unit);
 
@@ -208,7 +219,7 @@ BVIEW_STATUS bst_config_feature_set (BVIEW_BST_REQUEST_MSG_t * msg_data)
  /* Set the asic with the desired config to control bst */  
   bstMode.enableStatsMonitoring = msg_data->request.config.bstEnable;
   bstMode.enablePeriodicCollection = true;
-  bstMode.collectionPeriod = ptr->collectionInterval;
+  bstMode.collectionPeriod = interval;
   bstMode.bstMaxTriggers = ptr->bstMaxTriggers;
   bstMode.sendSnapshotOnTrigger = ptr->sendSnapshotOnTrigger;
   rv = sbapi_bst_config_set (msg_data->unit, &bstMode);
@@ -368,18 +379,28 @@ BVIEW_STATUS bst_config_track_set (BVIEW_BST_REQUEST_MSG_t * msg_data)
       what ever is desired.. is already in place .. */
     return rv;
   }
- /* request has additonal than what is currently there.
+  if (true == msg_data->request.track.trackPeakStats)
+  {
+    trackPeakStats = BVIEW_BST_MODE_PEAK;
+  }
+  else
+  {
+    trackPeakStats = BVIEW_BST_MODE_CURRENT;
+  }
+
+  /* request has additonal than what is currently there.
     program the asic */
   memset (&bstMode, 0, sizeof (BVIEW_BST_CONFIG_t));
  
- if (true == msg_data->request.track.trackPeakStats)
- {
-   trackPeakStats = BVIEW_BST_MODE_PEAK;
- }
- else
- {
-   trackPeakStats = BVIEW_BST_MODE_CURRENT;
- }
+  rv = sbapi_bst_config_get (msg_data->unit, &bstMode);
+  if (BVIEW_STATUS_SUCCESS == rv)
+  {
+     /*successfully programed the asic. store the config */
+     LOG_POST (BVIEW_LOG_INFO,
+              "bst application: failed to get the current bst conifg"
+               " for unit %d.\r\n", msg_data->unit);
+  }
+
   bstMode.enableStatsMonitoring = config_ptr->bstEnable;
   bstMode.enableDeviceStatsMonitoring = trackDevice;
   bstMode.enableIngressStatsMonitoring = trackIngress;
@@ -388,7 +409,6 @@ BVIEW_STATUS bst_config_track_set (BVIEW_BST_REQUEST_MSG_t * msg_data)
   bstMode.trackMask = msg_data->request.track.trackMask;
 
   bstMode.enablePeriodicCollection =  true;
-  bstMode.collectionPeriod =  config_ptr->collectionInterval;
   bstMode.bstMaxTriggers =  config_ptr->bstMaxTriggers;
   bstMode.sendSnapshotOnTrigger = config_ptr->sendSnapshotOnTrigger;
   bstMode.statUnitsInCells = config_ptr->statUnitsInCells;
@@ -1007,7 +1027,6 @@ BVIEW_STATUS bst_update_config_set(BVIEW_BST_REQUEST_MSG_t * msg_data)
 {
   BVIEW_BST_TRACK_PARAMS_t *track_ptr;
   BVIEW_BST_CONFIG_PARAMS_t *ptr;
-  bool timerUpdateReqd = false;
   BVIEW_BST_CONFIG_t bstMode;
   BVIEW_STATUS rv = BVIEW_STATUS_SUCCESS;
 
@@ -1041,20 +1060,6 @@ BVIEW_STATUS bst_update_config_set(BVIEW_BST_REQUEST_MSG_t * msg_data)
       ptr->bstEnable = bstMode.enableStatsMonitoring;
     }
 
-    /* Collection interval has changed.
-       so need to register the modified interval with the timer */
-    if (ptr->collectionInterval != bstMode.collectionPeriod)
-    {
-      ptr->collectionInterval = bstMode.collectionPeriod;
-     /* if BST is enabled and the async periodic reporting
-        is enabled, then update the timer */
-      if ((true == ptr->bstEnable) &&
-           (true == ptr->sendAsyncReports))
-      {
-        timerUpdateReqd = true;
-      } 
-    }
-
     /* update send snap shot on trigger */
     if (ptr->sendSnapshotOnTrigger != bstMode.sendSnapshotOnTrigger)
     {
@@ -1067,13 +1072,6 @@ BVIEW_STATUS bst_update_config_set(BVIEW_BST_REQUEST_MSG_t * msg_data)
       ptr->bstMaxTriggers = bstMode.bstMaxTriggers;
     }
     BST_RWLOCK_UNLOCK(msg_data->unit);
-    /*
-       Register with the timer for periodic callbacks */
-    if (true == timerUpdateReqd)
-    {
-      bst_periodic_collection_timer_add (msg_data->unit);
-    }
-
   }
   if (msg_data->msg_type == BVIEW_BST_CMD_API_UPDATE_TRACK)
   {
