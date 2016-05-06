@@ -1305,7 +1305,7 @@ BVIEW_STATUS sbplugin_ovsdb_bst_eucq_threshold_set (int asic,
                               BVIEW_BST_EGRESS_UC_QUEUE_THRESHOLD_t *thres)
 {
   BVIEW_STATUS           rv = BVIEW_STATUS_SUCCESS;
-  int                    port = 0, cosq = 0;
+  int                    port = 0;
 
    /*validate ASIC*/
   SB_OVSDB_VALID_UNIT_CHECK (asic);
@@ -1318,7 +1318,7 @@ BVIEW_STATUS sbplugin_ovsdb_bst_eucq_threshold_set (int asic,
   }
  
   /*  The BST_Threshold for the Egress UC Queues.*/ 
-  rv = bst_ovsdb_threshold_set (asic, port, cosq, 
+  rv = bst_ovsdb_threshold_set (asic, port, ucQueue, 
                                 SB_OVSDB_BST_STAT_ID_UCAST, thres->ucBufferThreshold);
   if (BVIEW_STATUS_SUCCESS != rv)
   {
@@ -1396,7 +1396,7 @@ BVIEW_STATUS sbplugin_ovsdb_bst_emcq_threshold_set (int asic,
                                       BVIEW_BST_EGRESS_MC_QUEUE_THRESHOLD_t *thres)
 {
   BVIEW_STATUS           rv = BVIEW_STATUS_SUCCESS; 
-  int                    port = 0, cosq = 0;
+  int                    port = 0;
 
    /*validate ASIC*/
   SB_OVSDB_VALID_UNIT_CHECK (asic);
@@ -1409,7 +1409,7 @@ BVIEW_STATUS sbplugin_ovsdb_bst_emcq_threshold_set (int asic,
     return BVIEW_STATUS_INVALID_PARAMETER;
   } 
 
-  rv = bst_ovsdb_threshold_set (asic, port, cosq, 
+  rv = bst_ovsdb_threshold_set (asic, port, mcQueue, 
                                 SB_OVSDB_BST_STAT_ID_MCAST, thres->mcBufferThreshold);
   if (BVIEW_STATUS_SUCCESS != rv)
   {
