@@ -317,7 +317,8 @@ bst_ovsdb_cache_update_table(const char *table_name, struct json *table_update,
   BVIEW_OVSDB_BST_DATA_t     *p_cache = NULL;
   int                         trackMask = 0;
   int                         oldTrackMask = 0;
-
+  static bool sys_cache_init_done = false;
+  static bool bufmon_cache_init_done = false;
 
   /* NULL Pointer validation*/
   SB_OVSDB_NULLPTR_CHECK (table_update, BVIEW_STATUS_INVALID_PARAMETER);
@@ -419,6 +420,7 @@ bst_ovsdb_cache_update_table(const char *table_name, struct json *table_update,
 	      bid, port, queue,
 	      default_threshold,
 	      &row);
+           bufmon_cache_init_done = true;
 	  if (status && status->type == JSON_STRING)
 	  {
 	    if (strcmp("triggered", status->u.string) == 0)
@@ -447,6 +449,7 @@ bst_ovsdb_cache_update_table(const char *table_name, struct json *table_update,
       if (config)
       {
 	bst_system_bufmon_config_update (config);
+        sys_cache_init_done = true;
       }
     }
   } /* SHASH_FOR_EACH (node, json_object(table_update)) */
@@ -459,11 +462,14 @@ bst_ovsdb_cache_update_table(const char *table_name, struct json *table_update,
 
   if (strlen (system_table_uuid) > 0)
   {
-    if (sem_post(&monitor_init_done_sem) != 0)
+    if (sys_cache_init_done && bufmon_cache_init_done)
     {
-      SB_OVSDB_LOG (BVIEW_LOG_ERROR,
-	  "OVSDB BST monitor: Failed to release semaphore");
-      return BVIEW_STATUS_FAILURE;
+      if (sem_post(&monitor_init_done_sem) != 0)
+      {
+        SB_OVSDB_LOG (BVIEW_LOG_ERROR,
+           "OVSDB BST monitor: Failed to release semaphore");
+        return BVIEW_STATUS_FAILURE;
+      }
     }
   }
 

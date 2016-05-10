@@ -34,7 +34,7 @@
 #include "ovsdb_bst_ctl.h"
 
 /* Ovsdb Monitor init time out value */
-#define SB_OVSDB_MONITOR_INIT_TIME_OUT    10   /* Seconds */
+#define SB_OVSDB_MONITOR_INIT_TIME_OUT    30   /* Seconds */
 
 /* Macro to iterate all ports*/
 #define  BVIEW_BST_PORT_ITER(_asic,_port)                                         \
