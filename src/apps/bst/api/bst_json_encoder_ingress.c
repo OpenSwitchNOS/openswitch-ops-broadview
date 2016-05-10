@@ -72,7 +72,7 @@ static BVIEW_STATUS _jsonencode_report_ingress_ippg ( char *buffer, int asicId,
     for (port = 1; port <= asic->numPorts; port++)
     {
       /* check if the trigger report request should contain snap shot */
-        if ((port-1 != options->triggerInfo.port) && 
+        if ((port != options->triggerInfo.port) &&
             (false == options->sendSnapShotOnTrigger) && 
             (true == options->reportTrigger))
         {
@@ -234,7 +234,7 @@ static BVIEW_STATUS _jsonencode_report_ingress_ipsp ( char *buffer, int asicId,
     for (port = 1; port <= asic->numPorts; port++)
     {
       /* check if the trigger report request should contain snap shot */
-        if ((port-1 != options->triggerInfo.port) && 
+        if ((port != options->triggerInfo.port) &&
             (false == options->sendSnapShotOnTrigger) && 
             (true == options->reportTrigger))
         {
