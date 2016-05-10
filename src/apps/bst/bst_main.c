@@ -109,8 +109,8 @@ BVIEW_STATUS bst_clear_trigger_count (BVIEW_BST_REQUEST_MSG_t * msg_data)
 {
   BVIEW_STATUS rv = BVIEW_STATUS_SUCCESS;
   BVIEW_BST_UNIT_CXT_t *ptr;
-  bool clearTimer = true;
   unsigned int i;
+  bool clearTimer = true;
   BVIEW_BST_REQUEST_MSG_t bst_msg = {0};
 
   if (NULL == msg_data)
