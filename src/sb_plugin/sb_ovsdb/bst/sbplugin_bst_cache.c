@@ -27,6 +27,8 @@
 #include "sbplugin_bst_ovsdb.h"
 #include "sbplugin_bst_cache.h"
 
+#define OVSDB_BST_MAX_TRIGGERS_NOT_INIT 0
+#define OVSDB_BST_MAX_TRIGGERS_DEFAULT  60
 
 /* BST cache for config, stats and thresholds */
 static BVIEW_OVSDB_BST_DATA_t  bst_ovsdb_cache; 
@@ -128,7 +130,15 @@ BVIEW_STATUS bst_ovsdb_cache_bst_config_get(int asic,
   config->bst_tracking_mode = bst_ovsdb_cache.config_data.bst_tracking_mode;
   config->periodic_collection  = bst_ovsdb_cache.config_data.periodic_collection;
   config->collection_interval  = bst_ovsdb_cache.config_data.collection_interval;
-  config->bstMaxTriggers  = bst_ovsdb_cache.config_data.bstMaxTriggers;
+  if (OVSDB_BST_MAX_TRIGGERS_NOT_INIT == bst_ovsdb_cache.config_data.bstMaxTriggers)
+  {
+   config->bstMaxTriggers = OVSDB_BST_MAX_TRIGGERS_DEFAULT;
+  }
+  else
+  {
+    config->bstMaxTriggers  = bst_ovsdb_cache.config_data.bstMaxTriggers;
+  }
+  
   config->sendSnapshotOnTrigger  = bst_ovsdb_cache.config_data.sendSnapshotOnTrigger;
   config->trackingMask         = bst_ovsdb_cache.config_data.trackingMask;
 
