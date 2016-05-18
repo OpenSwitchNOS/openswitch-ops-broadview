@@ -34,7 +34,7 @@
 #include "ovsdb_bst_ctl.h"
 
 /* Ovsdb Monitor init time out value */
-#define SB_OVSDB_MONITOR_INIT_TIME_OUT    10   /* Seconds */
+#define SB_OVSDB_MONITOR_INIT_TIME_OUT    40   /* Seconds */
 
 /* Macro to iterate all ports*/
 #define  BVIEW_BST_PORT_ITER(_asic,_port)                                         \
@@ -76,7 +76,7 @@
 /* Macro to iterate all Queue Groups */
 #define  BVIEW_BST_UC_QUEUE_GRP_ITER(_asic, _qgroup)                                                             \
                for ((_qgroup) = 0; (_qgroup) < asicDb[(_asic)].scalingParams.numUnicastQueueGroups;              \
-                    (_qgroup)++) 
+                    (_qgroup)++)
 
 
 #define BVIEW_OVSDB_BST_GET_DB_INDEX(_asic, _bid, _index1, _index2, _p_dbindex) \
@@ -86,7 +86,7 @@
                             { \
                               return BVIEW_STATUS_FAILURE;\
                             } \
-                          } 
+                          }
 
 #define BVIEW_OVSDB_BST_CACHE_GET(_cache) \
               {\
@@ -102,8 +102,8 @@ sem_t monitor_init_done_sem;
 pthread_t ovsdb_client_thread;
 
 /*********************************************************************
-* @brief    OVSDB BST client  
-*           
+* @brief    OVSDB BST client
+*
 *
 *
 * @notes    open a JSON RPC session and process "update" notification
@@ -116,10 +116,10 @@ void bst_ovsdb_client()
 }
 
 /*********************************************************************
-* @brief    OVSDB client init and spawn a thread to act as ovsdb client 
+* @brief    OVSDB client init and spawn a thread to act as ovsdb client
 *            for BST
 *
-* @retval   BVIEW_STATUS_SUCCESS if ovsdb client 
+* @retval   BVIEW_STATUS_SUCCESS if ovsdb client
 *                                initialized successfully.
 * @retval   BVIEW_STATUS_FAILURE if initialization is failed.
 *
@@ -132,7 +132,7 @@ BVIEW_STATUS bst_ovsdb_client_init()
   BVIEW_STATUS rv = BVIEW_STATUS_SUCCESS;
   struct timespec ts;
   int retVal = 0;
-  
+
 /*  char *ovsdb_soc = OVSDB_SOCKET_FILE;*/
 
   if (sem_init(&monitor_init_done_sem, 0, 0) == -1)
@@ -171,11 +171,11 @@ BVIEW_STATUS bst_ovsdb_client_init()
     }
     perror("sem_timedwait");
     rv = BVIEW_STATUS_FAILURE;
-  } 
+  }
   else
   {
-    rv = BVIEW_STATUS_SUCCESS;   
-  } 
+    rv = BVIEW_STATUS_SUCCESS;
+  }
   return rv;
 }
 
@@ -209,10 +209,9 @@ BVIEW_STATUS sbplugin_ovsdb_bst_infra_init()
   }
 
 
-  
+
   return rv;
 }
-
 /*********************************************************************
 * @brief  BST feature configuration set function
 *
@@ -231,30 +230,39 @@ BVIEW_STATUS sbplugin_ovsdb_bst_config_set (int asic, BVIEW_BST_CONFIG_t *data)
 {
   BVIEW_STATUS   rv = BVIEW_STATUS_SUCCESS;
   BVIEW_OVSDB_CONFIG_DATA_t     config;
-  
+
   /* Check validity of input data and asic validity check*/
   BVIEW_BST_INPUT_VALID_CHECK (asic, data);
 
   memset (&config, 0x00, sizeof (config));
   /* enableStatsMonitoring can be either 'true' or 'false'*/
   if (data->enableStatsMonitoring != true &&
-      data->enableStatsMonitoring != false) 
+      data->enableStatsMonitoring != false)
   {
     return BVIEW_STATUS_INVALID_PARAMETER;
-  }  
- 
+  }
+
   /* Check the validity of tracking mode*/
   if (BVIEW_BST_MODE_CURRENT != data->mode &&
       BVIEW_BST_MODE_PEAK != data->mode)
   {
      return BVIEW_STATUS_INVALID_PARAMETER;
   }
-  
+
   config.bst_enable           = data->enableStatsMonitoring;
-  config.bst_tracking_mode    = (int) data->mode; 
+  config.bst_tracking_mode    = (int) data->mode;
   /* Periodic collection should be enabled whenever bst is enabled.
-     This flag is used to collect BST stats periodically and update OVSDB by bufmon_stats thread */ 
-  config.periodic_collection  = config.bst_enable;
+     This flag is used to collect BST stats periodically and update OVSDB by bufmon_stats thread */
+  config.periodic_collection  = data->enablePeriodicCollection;
+  config.collection_interval  = data->collectionPeriod;
+  config.bstMaxTriggers  = data->bstMaxTriggers;
+  config.sendSnapshotOnTrigger  = data->sendSnapshotOnTrigger;
+  config.trackingMask = data->trackMask;
+  config.trackInit = data->trackInit;
+  config.triggerCollectionEnabled = true;
+
+  /* Prepare of MASK of ream's enabled for tracking*/
+/*  sbplugin_ovsdb_realm_mask (data, &config); */
 
   rv = bst_ovsdb_bst_config_set(asic, &config);
   if (BVIEW_STATUS_SUCCESS != rv)
@@ -263,11 +271,20 @@ BVIEW_STATUS sbplugin_ovsdb_bst_config_set (int asic, BVIEW_BST_CONFIG_t *data)
                 "BST:ASIC(%d) Failed to set bst mode",asic);
     return BVIEW_STATUS_FAILURE;
   }
+
+  rv = bst_ovsdb_cache_bst_config_set(asic, &config);
+  if (BVIEW_STATUS_SUCCESS != rv)
+  {
+    SB_OVSDB_DEBUG_PRINT (
+                "BST:ASIC(%d) Failed to set bst mode in cache",asic);
+    return BVIEW_STATUS_FAILURE;
+  }
+
   return BVIEW_STATUS_SUCCESS;
 }
 
 /*********************************************************************
-* @brief  Get BST configuration 
+* @brief  Get BST configuration
 *
 * @param[in]   asic                  - unit
 * @param[out]  data                  - BST config structure
@@ -281,7 +298,7 @@ BVIEW_STATUS sbplugin_ovsdb_bst_config_set (int asic, BVIEW_BST_CONFIG_t *data)
 *
 *
 *********************************************************************/
-BVIEW_STATUS sbplugin_ovsdb_bst_config_get (int asic, 
+BVIEW_STATUS sbplugin_ovsdb_bst_config_get (int asic,
                                             BVIEW_BST_CONFIG_t *data)
 {
   BVIEW_STATUS   rv = BVIEW_STATUS_SUCCESS;
@@ -306,15 +323,16 @@ BVIEW_STATUS sbplugin_ovsdb_bst_config_get (int asic,
                 "BST:ASIC(%d) Failed to get BST configuration",asic);
     return BVIEW_STATUS_FAILURE;
   }
-
   data->enableStatsMonitoring = config.bst_enable;
   data->mode = config.bst_tracking_mode;
   data->enablePeriodicCollection = config.periodic_collection;
   data->collectionPeriod =  config.collection_interval;
+  data->bstMaxTriggers =  config.bstMaxTriggers;
+  data->sendSnapshotOnTrigger =  config.sendSnapshotOnTrigger;
+  data->trackMask =  config.trackingMask;
 
  return  BVIEW_STATUS_SUCCESS;
 }
-
 /*********************************************************************
 * @brief  Obtain Complete ASIC Statistics Report
 *
@@ -330,8 +348,8 @@ BVIEW_STATUS sbplugin_ovsdb_bst_config_get (int asic,
 *
 *
 *********************************************************************/
-BVIEW_STATUS sbplugin_ovsdb_bst_snapshot_get (int asic, 
-                                 BVIEW_BST_ASIC_SNAPSHOT_DATA_t *snapshot, 
+BVIEW_STATUS sbplugin_ovsdb_bst_snapshot_get (int asic,
+                                 BVIEW_BST_ASIC_SNAPSHOT_DATA_t *snapshot,
                                  BVIEW_TIME_t *time)
 {
   BVIEW_STATUS rv = BVIEW_STATUS_SUCCESS;
@@ -339,7 +357,7 @@ BVIEW_STATUS sbplugin_ovsdb_bst_snapshot_get (int asic,
   /* Check validity of input data*/
   BVIEW_BST_INPUT_VALIDATE (asic, snapshot, time);
 
-  /* Obtain Device Statistics */ 
+  /* Obtain Device Statistics */
   rv = sbplugin_ovsdb_bst_device_data_get (asic, &snapshot->device, time);
   if (rv != BVIEW_STATUS_SUCCESS)
   {
@@ -379,7 +397,7 @@ BVIEW_STATUS sbplugin_ovsdb_bst_snapshot_get (int asic,
   {
     return BVIEW_STATUS_FAILURE;
   }
- 
+
   /* Obtain Egress Egress Unicast Queues Statistics */
   rv = sbplugin_ovsdb_bst_eucq_data_get (asic, &snapshot->eUcQ, time);
   if (rv != BVIEW_STATUS_SUCCESS)
@@ -416,7 +434,7 @@ BVIEW_STATUS sbplugin_ovsdb_bst_snapshot_get (int asic,
   }
   return BVIEW_STATUS_SUCCESS;
 }
- 
+
 /*********************************************************************
 * @brief  Obtain Device Statistics
 *
@@ -432,14 +450,14 @@ BVIEW_STATUS sbplugin_ovsdb_bst_snapshot_get (int asic,
 *
 *
 *********************************************************************/
-BVIEW_STATUS sbplugin_ovsdb_bst_device_data_get (int asic, 
-                                    BVIEW_BST_DEVICE_DATA_t *data, 
+BVIEW_STATUS sbplugin_ovsdb_bst_device_data_get (int asic,
+                                    BVIEW_BST_DEVICE_DATA_t *data,
                                     BVIEW_TIME_t *time)
 {
   BVIEW_OVSDB_BST_DATA_t     *p_cache = NULL;
 
   /* Check validity of input data*/
-  BVIEW_BST_INPUT_VALIDATE (asic, data, time); 
+  BVIEW_BST_INPUT_VALIDATE (asic, data, time);
 
   /* Get OVSDB cache*/
   BVIEW_OVSDB_BST_CACHE_GET (p_cache);
@@ -449,12 +467,12 @@ BVIEW_STATUS sbplugin_ovsdb_bst_device_data_get (int asic,
   /* Update current local time*/
   sbplugin_ovsdb_system_time_get (time);
 
-  /*Get total use-count is expressed in terms of buffers used in the device*/ 
+  /*Get total use-count is expressed in terms of buffers used in the device*/
   data->bufferCount = p_cache->cache[asic].device.stat;
 
   /* Release lock */
   SB_OVSDB_RWLOCK_UNLOCK(p_cache->lock);
-  return BVIEW_STATUS_SUCCESS; 
+  return BVIEW_STATUS_SUCCESS;
 }
 
 /*********************************************************************
@@ -472,12 +490,12 @@ BVIEW_STATUS sbplugin_ovsdb_bst_device_data_get (int asic,
 *
 *
 *********************************************************************/
-BVIEW_STATUS sbplugin_ovsdb_bst_ippg_data_get (int asic, 
-                              BVIEW_BST_INGRESS_PORT_PG_DATA_t *data, 
+BVIEW_STATUS sbplugin_ovsdb_bst_ippg_data_get (int asic,
+                              BVIEW_BST_INGRESS_PORT_PG_DATA_t *data,
                               BVIEW_TIME_t *time)
 {
-  unsigned int  port  =0; 
-  unsigned int  pg    =0; 
+  unsigned int  port  =0;
+  unsigned int  pg    =0;
   BVIEW_OVSDB_BST_DATA_t     *p_cache = NULL;
   int         db_index = 0;
 
@@ -498,18 +516,18 @@ BVIEW_STATUS sbplugin_ovsdb_bst_ippg_data_get (int asic,
     /* Loop through all priority groups*/
     BVIEW_BST_PG_ITER (asic, pg)
     {
-      /*BST_Stat for each of the (Ingress Port, PG) UC plus MC 
+      /*BST_Stat for each of the (Ingress Port, PG) UC plus MC
        * Shared use-counts in units of buffers.
        */
-      BVIEW_OVSDB_BST_GET_DB_INDEX(asic, SB_OVSDB_BST_STAT_ID_PRI_GROUP_SHARED, 
+      BVIEW_OVSDB_BST_GET_DB_INDEX(asic, SB_OVSDB_BST_STAT_ID_PRI_GROUP_SHARED,
                                    port, pg, &db_index);
-      data->data[port - 1][pg].umShareBufferCount = 
-                     p_cache->cache[asic].iPGShared[db_index].stat;   
+      data->data[port - 1][pg].umShareBufferCount =
+                     p_cache->cache[asic].iPGShared[db_index].stat;
 
-      /* BST_Stat for each of the (Ingress Port, PG) UC plus MC 
+      /* BST_Stat for each of the (Ingress Port, PG) UC plus MC
        * Headroom use-counts in units of buffers.
        */
-      BVIEW_OVSDB_BST_GET_DB_INDEX(asic, SB_OVSDB_BST_STAT_ID_PRI_GROUP_HEADROOM, 
+      BVIEW_OVSDB_BST_GET_DB_INDEX(asic, SB_OVSDB_BST_STAT_ID_PRI_GROUP_HEADROOM,
                                    port, pg, &db_index);
       data->data[port - 1][pg].umHeadroomBufferCount =
                      p_cache->cache[asic].iPGHeadroom[db_index].stat;
@@ -519,8 +537,8 @@ BVIEW_STATUS sbplugin_ovsdb_bst_ippg_data_get (int asic,
   SB_OVSDB_RWLOCK_UNLOCK(p_cache->lock);
 
   return BVIEW_STATUS_SUCCESS;
-} 
-    
+}
+
 
 /*********************************************************************
 * @brief  Obtain Ingress Port + Service Pools Statistics
@@ -537,15 +555,15 @@ BVIEW_STATUS sbplugin_ovsdb_bst_ippg_data_get (int asic,
 *
 *
 *********************************************************************/
-BVIEW_STATUS sbplugin_ovsdb_bst_ipsp_data_get (int asic, 
-                                  BVIEW_BST_INGRESS_PORT_SP_DATA_t *data, 
+BVIEW_STATUS sbplugin_ovsdb_bst_ipsp_data_get (int asic,
+                                  BVIEW_BST_INGRESS_PORT_SP_DATA_t *data,
                                   BVIEW_TIME_t *time)
 {
- unsigned int         port =0; 
+ unsigned int         port =0;
  unsigned int         sp =0;
  BVIEW_OVSDB_BST_DATA_t     *p_cache = NULL;
  int         db_index = 0;
- 
+
  /* Check validity of input data*/
  BVIEW_BST_INPUT_VALIDATE (asic, data, time);
  /* Update current local time*/
@@ -558,18 +576,18 @@ BVIEW_STATUS sbplugin_ovsdb_bst_ipsp_data_get (int asic,
  /* Loop through all the ports*/
  BVIEW_BST_PORT_ITER (asic, port)
  {
-   /* BST_Stat for each of the 4 SPs Shared use-counts 
+   /* BST_Stat for each of the 4 SPs Shared use-counts
     * associated with this Port in units of buffers.
     */
    BVIEW_BST_SP_ITER (asic,sp)
    {
-     BVIEW_OVSDB_BST_GET_DB_INDEX(asic,SB_OVSDB_BST_STAT_ID_PORT_POOL, 
+     BVIEW_OVSDB_BST_GET_DB_INDEX(asic,SB_OVSDB_BST_STAT_ID_PORT_POOL,
                                   port, sp, &db_index);
      data->data[port - 1][sp].umShareBufferCount =
                            p_cache->cache[asic].iPortSP[db_index].stat;
    }
  }
-  
+
  /* Release lock */
   SB_OVSDB_RWLOCK_UNLOCK(p_cache->lock);
 
@@ -591,8 +609,8 @@ BVIEW_STATUS sbplugin_ovsdb_bst_ipsp_data_get (int asic,
 *
 *
 *********************************************************************/
-BVIEW_STATUS sbplugin_ovsdb_bst_isp_data_get (int asic, 
-                                 BVIEW_BST_INGRESS_SP_DATA_t *data, 
+BVIEW_STATUS sbplugin_ovsdb_bst_isp_data_get (int asic,
+                                 BVIEW_BST_INGRESS_SP_DATA_t *data,
                                  BVIEW_TIME_t *time)
 {
  int                  sp =0;
@@ -615,13 +633,13 @@ BVIEW_STATUS sbplugin_ovsdb_bst_isp_data_get (int asic,
  {
    BVIEW_OVSDB_BST_GET_DB_INDEX (asic,SB_OVSDB_BST_STAT_ID_ING_POOL,
                                  0, sp, &db_index);
-   data->data[sp].umShareBufferCount = 
+   data->data[sp].umShareBufferCount =
          p_cache->cache[asic].iSP[db_index].stat;
  }
   /* Release lock */
  SB_OVSDB_RWLOCK_UNLOCK(p_cache->lock);
  return BVIEW_STATUS_SUCCESS;
-} 
+}
 /*********************************************************************
 * @brief  Obtain Egress Port + Service Pools Statistics
 *
@@ -637,8 +655,8 @@ BVIEW_STATUS sbplugin_ovsdb_bst_isp_data_get (int asic,
 *
 *
 *********************************************************************/
-BVIEW_STATUS sbplugin_ovsdb_bst_epsp_data_get (int asic, 
-                                BVIEW_BST_EGRESS_PORT_SP_DATA_t *data, 
+BVIEW_STATUS sbplugin_ovsdb_bst_epsp_data_get (int asic,
+                                BVIEW_BST_EGRESS_PORT_SP_DATA_t *data,
                                 BVIEW_TIME_t *time)
 {
  unsigned int         port  =0;
@@ -660,7 +678,7 @@ BVIEW_STATUS sbplugin_ovsdb_bst_epsp_data_get (int asic,
  BVIEW_BST_PORT_ITER (asic, port)
  {
    BVIEW_BST_SP_ITER (asic, sp)
-   { 
+   {
      /* Obtain Egress Port + Service Pools Statistics - U cast stats*/
      BVIEW_OVSDB_BST_GET_DB_INDEX (asic, SB_OVSDB_BST_STAT_ID_EGR_UCAST_PORT_SHARED,
                                    port, sp, &db_index);
@@ -670,7 +688,7 @@ BVIEW_STATUS sbplugin_ovsdb_bst_epsp_data_get (int asic,
      /* Obtain Egress Port + Service Pools Statistics - Ucast+Mcast cast stats*/
      BVIEW_OVSDB_BST_GET_DB_INDEX (asic, SB_OVSDB_BST_STAT_ID_EGR_PORT_SHARED,
                                    port, sp, &db_index)
-     data->data[port - 1][sp].umShareBufferCount = 
+     data->data[port - 1][sp].umShareBufferCount =
              p_cache->cache[asic].ePortSPumShare[db_index].stat;
    }
  }
@@ -694,8 +712,8 @@ BVIEW_STATUS sbplugin_ovsdb_bst_epsp_data_get (int asic,
 *
 *
 *********************************************************************/
-BVIEW_STATUS sbplugin_ovsdb_bst_esp_data_get  (int asic, 
-                               BVIEW_BST_EGRESS_SP_DATA_t *data, 
+BVIEW_STATUS sbplugin_ovsdb_bst_esp_data_get  (int asic,
+                               BVIEW_BST_EGRESS_SP_DATA_t *data,
                                BVIEW_TIME_t *time)
 {
  unsigned int         sp =0;
@@ -720,12 +738,12 @@ BVIEW_STATUS sbplugin_ovsdb_bst_esp_data_get  (int asic,
     */
    BVIEW_OVSDB_BST_GET_DB_INDEX (asic, SB_OVSDB_BST_STAT_ID_EGR_POOL,
                                  0, sp, &db_index);
-   data->data[sp].umShareBufferCount = 
-                    p_cache->cache[asic].eSPumShare[db_index].stat; 
+   data->data[sp].umShareBufferCount =
+                    p_cache->cache[asic].eSPumShare[db_index].stat;
    /*BST_Threshold for each of the 4 Egress SP MC Share use-counts in units of buffers.*/
    BVIEW_OVSDB_BST_GET_DB_INDEX (asic, SB_OVSDB_BST_STAT_ID_EGR_MCAST_POOL,
                                  0, sp, &db_index);
-   data->data[sp].mcShareBufferCount = 
+   data->data[sp].mcShareBufferCount =
                     p_cache->cache[asic].eSPmcShare[db_index].stat;
  }
   /* Release lock */
@@ -748,8 +766,8 @@ BVIEW_STATUS sbplugin_ovsdb_bst_esp_data_get  (int asic,
 *
 *
 *********************************************************************/
-BVIEW_STATUS sbplugin_ovsdb_bst_eucq_data_get (int asic, 
-                              BVIEW_BST_EGRESS_UC_QUEUE_DATA_t *data, 
+BVIEW_STATUS sbplugin_ovsdb_bst_eucq_data_get (int asic,
+                              BVIEW_BST_EGRESS_UC_QUEUE_DATA_t *data,
                               BVIEW_TIME_t *time)
 {
  unsigned int         cosq = 0;
@@ -767,19 +785,19 @@ BVIEW_STATUS sbplugin_ovsdb_bst_eucq_data_get (int asic,
   /* Acquire read lock*/
  SB_OVSDB_RWLOCK_RD_LOCK(p_cache->lock);
  /* Iterate COSQ*/
- BVIEW_BST_UC_QUEUE_ITER (asic, cosq) 
+ BVIEW_BST_UC_QUEUE_ITER (asic, cosq)
  {
    /*BST_Stat for the UC queue total use-counts in units of buffers.*/
    BVIEW_OVSDB_BST_GET_DB_INDEX (asic, SB_OVSDB_BST_STAT_ID_UCAST,
                                  0, cosq, &db_index);
-   data->data[cosq].ucBufferCount = 
+   data->data[cosq].ucBufferCount =
                  p_cache->cache[asic].ucQ[db_index].stat;
  }
   /* Release lock */
  SB_OVSDB_RWLOCK_UNLOCK(p_cache->lock);
  return BVIEW_STATUS_SUCCESS;
 }
-   
+
 /*********************************************************************
 * @brief  Obtain Egress Egress Unicast Queue Groups Statistics
 *
@@ -795,8 +813,8 @@ BVIEW_STATUS sbplugin_ovsdb_bst_eucq_data_get (int asic,
 *
 *
 *********************************************************************/
-BVIEW_STATUS sbplugin_ovsdb_bst_eucqg_data_get (int asic, 
-                        BVIEW_BST_EGRESS_UC_QUEUEGROUPS_DATA_t *data, 
+BVIEW_STATUS sbplugin_ovsdb_bst_eucqg_data_get (int asic,
+                        BVIEW_BST_EGRESS_UC_QUEUEGROUPS_DATA_t *data,
                         BVIEW_TIME_t *time)
 {
  unsigned int         cosq = 0;
@@ -815,12 +833,12 @@ BVIEW_STATUS sbplugin_ovsdb_bst_eucqg_data_get (int asic,
  /* Loop through all the UC_QUEUE_GROUPS*/
  BVIEW_BST_UC_QUEUE_GRP_ITER (asic, cosq)
  {
-   /* BST_Stat for each of the 128 Egress Unicast Queue-Group 
+   /* BST_Stat for each of the 128 Egress Unicast Queue-Group
     * Total use-counts in units of buffers.
     */
    BVIEW_OVSDB_BST_GET_DB_INDEX (asic, SB_OVSDB_BST_STAT_ID_UCAST_GROUP,
                                  0, cosq, &db_index);
-   data->data[cosq].ucBufferCount = 
+   data->data[cosq].ucBufferCount =
             p_cache->cache[asic].eUCqGroup[db_index].stat;
  }
   /* Release lock */
@@ -843,8 +861,8 @@ BVIEW_STATUS sbplugin_ovsdb_bst_eucqg_data_get (int asic,
 *
 *
 *********************************************************************/
-BVIEW_STATUS sbplugin_ovsdb_bst_emcq_data_get (int asic, 
-                              BVIEW_BST_EGRESS_MC_QUEUE_DATA_t *data, 
+BVIEW_STATUS sbplugin_ovsdb_bst_emcq_data_get (int asic,
+                              BVIEW_BST_EGRESS_MC_QUEUE_DATA_t *data,
                               BVIEW_TIME_t *time)
 {
  unsigned int         cosq =0;
@@ -867,7 +885,7 @@ BVIEW_STATUS sbplugin_ovsdb_bst_emcq_data_get (int asic,
      /*BST_Stat for the MC queue total use-counts in units of buffers.*/
    BVIEW_OVSDB_BST_GET_DB_INDEX (asic, SB_OVSDB_BST_STAT_ID_MCAST,
                                  0, cosq, &db_index);
-   data->data[cosq].mcBufferCount = 
+   data->data[cosq].mcBufferCount =
           p_cache->cache[asic].mcQ[db_index].stat;
  }
   /* Release lock */
@@ -890,8 +908,8 @@ BVIEW_STATUS sbplugin_ovsdb_bst_emcq_data_get (int asic,
 *
 *
 *********************************************************************/
-BVIEW_STATUS sbplugin_ovsdb_bst_cpuq_data_get (int asic, 
-                             BVIEW_BST_EGRESS_CPU_QUEUE_DATA_t *data, 
+BVIEW_STATUS sbplugin_ovsdb_bst_cpuq_data_get (int asic,
+                             BVIEW_BST_EGRESS_CPU_QUEUE_DATA_t *data,
                              BVIEW_TIME_t *time)
 {
  unsigned int         cosq = 0;
@@ -914,7 +932,7 @@ BVIEW_STATUS sbplugin_ovsdb_bst_cpuq_data_get (int asic,
    /*The BST_Threshold for the Egress CPU queues in units of buffers.*/
    BVIEW_OVSDB_BST_GET_DB_INDEX (asic, SB_OVSDB_BST_STAT_ID_CPU_QUEUE,
                                  0, cosq, &db_index);
-   data->data[cosq].cpuBufferCount = 
+   data->data[cosq].cpuBufferCount =
               p_cache->cache[asic].eCPU[db_index].stat;
  }
   /* Release lock */
@@ -923,7 +941,7 @@ BVIEW_STATUS sbplugin_ovsdb_bst_cpuq_data_get (int asic,
 }
 
 /*********************************************************************
-* @brief  Obtain Egress Egress RQE Queues Statistics 
+* @brief  Obtain Egress Egress RQE Queues Statistics
 *
 * @param[in]   asic             - unit
 * @param[out]  data             - RQE data data structure
@@ -937,9 +955,9 @@ BVIEW_STATUS sbplugin_ovsdb_bst_cpuq_data_get (int asic,
 *
 *
 *********************************************************************/
-BVIEW_STATUS sbplugin_ovsdb_bst_rqeq_data_get (int asic, 
-                                   BVIEW_BST_EGRESS_RQE_QUEUE_DATA_t *data, 
-                                   BVIEW_TIME_t *time) 
+BVIEW_STATUS sbplugin_ovsdb_bst_rqeq_data_get (int asic,
+                                   BVIEW_BST_EGRESS_RQE_QUEUE_DATA_t *data,
+                                   BVIEW_TIME_t *time)
 {
  unsigned int         cosq = 0;
  int         db_index = 0;
@@ -961,7 +979,7 @@ BVIEW_STATUS sbplugin_ovsdb_bst_rqeq_data_get (int asic,
    /* BST_Stat for each of the 11 RQE queues total use-counts in units of buffers.*/
    BVIEW_OVSDB_BST_GET_DB_INDEX (asic, SB_OVSDB_BST_STAT_ID_RQE_QUEUE,
                                  0 ,cosq, &db_index);
-   data->data[cosq].rqeBufferCount = 
+   data->data[cosq].rqeBufferCount =
            p_cache->cache[asic].rqe[db_index].stat;
  }
   /* Release lock */
@@ -983,7 +1001,7 @@ BVIEW_STATUS sbplugin_ovsdb_bst_rqeq_data_get (int asic,
 *
 *
 *********************************************************************/
-BVIEW_STATUS sbplugin_ovsdb_bst_device_threshold_set (int asic, 
+BVIEW_STATUS sbplugin_ovsdb_bst_device_threshold_set (int asic,
                                           BVIEW_BST_DEVICE_THRESHOLD_t *thres)
 {
   BVIEW_STATUS                rv  = BVIEW_STATUS_SUCCESS;
@@ -992,11 +1010,11 @@ BVIEW_STATUS sbplugin_ovsdb_bst_device_threshold_set (int asic,
   SB_OVSDB_VALID_UNIT_CHECK (asic);
 
   /* Check validity of input data*/
-  if (thres == NULL || 
+  if (thres == NULL ||
       BVIEW_BST_DEVICE_THRESHOLD_CHECK (thres))
   {
     return BVIEW_STATUS_INVALID_PARAMETER;
-  } 
+  }
 
   rv = bst_ovsdb_threshold_set(asic, 0, 0, SB_OVSDB_BST_STAT_ID_DEVICE, thres->threshold);
   if (BVIEW_STATUS_SUCCESS != rv)
@@ -1009,7 +1027,7 @@ BVIEW_STATUS sbplugin_ovsdb_bst_device_threshold_set (int asic,
 }
 
 /*********************************************************************
-* @brief  Set profile configuration for  
+* @brief  Set profile configuration for
 *           Ingress Port + Priority Groups Statistics
 *
 * @param[in]  asic              - unit
@@ -1020,12 +1038,12 @@ BVIEW_STATUS sbplugin_ovsdb_bst_device_threshold_set (int asic,
 * @retval BVIEW_STATUS_INVALID_PARAMETER if input data is invalid.
 * @retval BVIEW_STATUS_FAILURE           if threshold set is success.
 * @retval BVIEW_STATUS_SUCCESS           if threshold set is failed.
-*                                                             
+*
 * @notes    none
 *
 *
 *********************************************************************/
-BVIEW_STATUS sbplugin_ovsdb_bst_ippg_threshold_set (int asic, int port, int pg, 
+BVIEW_STATUS sbplugin_ovsdb_bst_ippg_threshold_set (int asic, int port, int pg,
                                      BVIEW_BST_INGRESS_PORT_PG_THRESHOLD_t *thres)
 {
   BVIEW_STATUS           rv = BVIEW_STATUS_SUCCESS;
@@ -1034,15 +1052,15 @@ BVIEW_STATUS sbplugin_ovsdb_bst_ippg_threshold_set (int asic, int port, int pg,
   SB_OVSDB_VALID_UNIT_CHECK (asic);
 
   /* Check validity of input data*/
-  if (thres == NULL || 
+  if (thres == NULL ||
       BVIEW_BST_IPPG_SHRD_THRESHOLD_CHECK (thres) ||
       BVIEW_BST_IPPG_HDRM_THRESHOLD_CHECK (thres))
   {
     return BVIEW_STATUS_INVALID_PARAMETER;
-  } 
+  }
 
   /* set threshold for shared buffer stats*/
-  rv = bst_ovsdb_threshold_set (asic, port, pg, 
+  rv = bst_ovsdb_threshold_set (asic, port, pg,
                                 SB_OVSDB_BST_STAT_ID_PRI_GROUP_SHARED, thres->umShareThreshold);
   if (BVIEW_STATUS_SUCCESS != rv)
   {
@@ -1051,7 +1069,7 @@ BVIEW_STATUS sbplugin_ovsdb_bst_ippg_threshold_set (int asic, int port, int pg,
     return BVIEW_STATUS_FAILURE;
   }
  /* set threshold for headroom buffer stats*/
-  rv = bst_ovsdb_threshold_set (asic, port, pg, 
+  rv = bst_ovsdb_threshold_set (asic, port, pg,
                                 SB_OVSDB_BST_STAT_ID_PRI_GROUP_HEADROOM, thres->umHeadroomThreshold);
   if (BVIEW_STATUS_SUCCESS != rv)
   {
@@ -1064,14 +1082,14 @@ BVIEW_STATUS sbplugin_ovsdb_bst_ippg_threshold_set (int asic, int port, int pg,
 }
 
 /*********************************************************************
-* @brief  Set profile configuration for Ingress Port + Service Pools 
+* @brief  Set profile configuration for Ingress Port + Service Pools
 *           Statistics
 *
 * @param[in] asic                     - unit
 * @param[in] port                     - port
 * @param[in] sp                       - service pool
 * @param[in] thres                    - Threshold data structure
-*                                                    
+*
 *
 * @retval BVIEW_STATUS_INVALID_PARAMETER if input data is invalid.
 * @retval BVIEW_STATUS_FAILURE           if threshold set is succes.
@@ -1081,7 +1099,7 @@ BVIEW_STATUS sbplugin_ovsdb_bst_ippg_threshold_set (int asic, int port, int pg,
 *
 *
 *********************************************************************/
-BVIEW_STATUS sbplugin_ovsdb_bst_ipsp_threshold_set (int asic, int port, int sp, 
+BVIEW_STATUS sbplugin_ovsdb_bst_ipsp_threshold_set (int asic, int port, int sp,
                                       BVIEW_BST_INGRESS_PORT_SP_THRESHOLD_t *thres)
 {
   BVIEW_STATUS           rv = BVIEW_STATUS_SUCCESS;
@@ -1090,14 +1108,14 @@ BVIEW_STATUS sbplugin_ovsdb_bst_ipsp_threshold_set (int asic, int port, int sp,
   SB_OVSDB_VALID_UNIT_CHECK (asic);
 
   /* Check validity of input data*/
-  if (thres == NULL || 
+  if (thres == NULL ||
       BVIEW_BST_IPSP_THRESHOLD_CHECK (thres))
   {
     return BVIEW_STATUS_INVALID_PARAMETER;
   }
- 
+
   /*Set profile configuration for Ingress Port + Service Pools*/
-  rv = bst_ovsdb_threshold_set (asic, port, sp, 
+  rv = bst_ovsdb_threshold_set (asic, port, sp,
                                 SB_OVSDB_BST_STAT_ID_PORT_POOL, thres->umShareThreshold);
   if (BVIEW_STATUS_SUCCESS != rv)
   {
@@ -1109,11 +1127,11 @@ BVIEW_STATUS sbplugin_ovsdb_bst_ipsp_threshold_set (int asic, int port, int sp,
 }
 
 /*********************************************************************
-* @brief  Set profile configuration for Ingress Service Pools 
+* @brief  Set profile configuration for Ingress Service Pools
 *           Statistics
 *
 * @param[in] asic                       - unit
-* @param[in] sp                         - service pool 
+* @param[in] sp                         - service pool
 * @param[in] thres                      - Threshold data structure
 *
 * @retval BVIEW_STATUS_INVALID_PARAMETER if input data is invalid.
@@ -1124,8 +1142,8 @@ BVIEW_STATUS sbplugin_ovsdb_bst_ipsp_threshold_set (int asic, int port, int sp,
 *
 *
 *********************************************************************/
-BVIEW_STATUS sbplugin_ovsdb_bst_isp_threshold_set (int asic, 
-                                     int sp, 
+BVIEW_STATUS sbplugin_ovsdb_bst_isp_threshold_set (int asic,
+                                     int sp,
                                      BVIEW_BST_INGRESS_SP_THRESHOLD_t *thres)
 {
   BVIEW_STATUS           rv = BVIEW_STATUS_SUCCESS;
@@ -1133,14 +1151,14 @@ BVIEW_STATUS sbplugin_ovsdb_bst_isp_threshold_set (int asic,
   SB_OVSDB_VALID_UNIT_CHECK (asic);
 
   /* Check validity of input data*/
-  if (thres == NULL || 
+  if (thres == NULL ||
       BVIEW_BST_ISP_THRESHOLD_CHECK (thres))
   {
     return BVIEW_STATUS_INVALID_PARAMETER;
-  } 
+  }
 
  /* The BST_Threshold for the (Ingress Port, SP) UC plus MC shared use-count.*/
-  rv = bst_ovsdb_threshold_set (asic, 0, sp, 
+  rv = bst_ovsdb_threshold_set (asic, 0, sp,
                                 SB_OVSDB_BST_STAT_ID_ING_POOL, thres->umShareThreshold);
   if (BVIEW_STATUS_SUCCESS != rv)
   {
@@ -1152,7 +1170,7 @@ BVIEW_STATUS sbplugin_ovsdb_bst_isp_threshold_set (int asic,
 }
 
 /*********************************************************************
-* @brief  Set Profile configuration for Egress Port + Service Pools 
+* @brief  Set Profile configuration for Egress Port + Service Pools
 *           Statistics
 *
 * @param[in] asic                       - unit
@@ -1168,28 +1186,28 @@ BVIEW_STATUS sbplugin_ovsdb_bst_isp_threshold_set (int asic,
 *
 *
 *********************************************************************/
-BVIEW_STATUS sbplugin_ovsdb_bst_epsp_threshold_set (int asic, 
-                                      int port, int sp, 
+BVIEW_STATUS sbplugin_ovsdb_bst_epsp_threshold_set (int asic,
+                                      int port, int sp,
                                       BVIEW_BST_EGRESS_PORT_SP_THRESHOLD_t *thres)
 {
-  BVIEW_STATUS           rv = BVIEW_STATUS_SUCCESS;  
+  BVIEW_STATUS           rv = BVIEW_STATUS_SUCCESS;
 
    /*validate ASIC*/
   SB_OVSDB_VALID_UNIT_CHECK (asic);
 
   /* Check validity of input data*/
-  if (thres == NULL || 
+  if (thres == NULL ||
       BVIEW_BST_EPSP_UC_THRESHOLD_CHECK (thres) ||
-      BVIEW_BST_EPSP_UM_THRESHOLD_CHECK (thres) || 
+      BVIEW_BST_EPSP_UM_THRESHOLD_CHECK (thres) ||
       BVIEW_BST_EPSP_MC_THRESHOLD_CHECK (thres))
   {
     return BVIEW_STATUS_INVALID_PARAMETER;
-  } 
+  }
 
-  /* The BST_Threshold for the Egress Per (Port, SP) 
+  /* The BST_Threshold for the Egress Per (Port, SP)
    * UC shared use-count in units of 8 buffers
    */
-  rv = bst_ovsdb_threshold_set (asic, port, sp, 
+  rv = bst_ovsdb_threshold_set (asic, port, sp,
                           SB_OVSDB_BST_STAT_ID_EGR_UCAST_PORT_SHARED, thres->ucShareThreshold);
   if (BVIEW_STATUS_SUCCESS != rv)
   {
@@ -1198,10 +1216,10 @@ BVIEW_STATUS sbplugin_ovsdb_bst_epsp_threshold_set (int asic,
     return BVIEW_STATUS_FAILURE;
   }
 
- /* The BST_Threshold for the Egress Per (Port, SP) 
+ /* The BST_Threshold for the Egress Per (Port, SP)
   * MC/UC+MC shared use-count in units of buffers.
   */
-  rv = bst_ovsdb_threshold_set (asic, port, sp, 
+  rv = bst_ovsdb_threshold_set (asic, port, sp,
                                SB_OVSDB_BST_STAT_ID_EGR_PORT_SHARED, thres->umShareThreshold);
   if (BVIEW_STATUS_SUCCESS != rv)
   {
@@ -1228,8 +1246,8 @@ BVIEW_STATUS sbplugin_ovsdb_bst_epsp_threshold_set (int asic,
 *
 *
 *********************************************************************/
-BVIEW_STATUS sbplugin_ovsdb_bst_esp_threshold_set (int asic, 
-                                     int sp, 
+BVIEW_STATUS sbplugin_ovsdb_bst_esp_threshold_set (int asic,
+                                     int sp,
                                      BVIEW_BST_EGRESS_SP_THRESHOLD_t *thres)
 {
   BVIEW_STATUS           rv = BVIEW_STATUS_SUCCESS;
@@ -1238,12 +1256,12 @@ BVIEW_STATUS sbplugin_ovsdb_bst_esp_threshold_set (int asic,
   SB_OVSDB_VALID_UNIT_CHECK (asic);
 
   /* Check validity of input data*/
-  if (thres == NULL || 
-      BVIEW_BST_E_SP_UM_THRESHOLD_CHECK (thres) || 
+  if (thres == NULL ||
+      BVIEW_BST_E_SP_UM_THRESHOLD_CHECK (thres) ||
       BVIEW_BST_E_SP_MC_THRESHOLD_CHECK (thres))
   {
     return BVIEW_STATUS_INVALID_PARAMETER;
-  } 
+  }
 
   /* BST_Threshold for each of the 4 Egress SPs Shared use-counts in units of buffers.*/
   rv = bst_ovsdb_threshold_set (asic, 0, sp, SB_OVSDB_BST_STAT_ID_EGR_POOL, thres->umShareThreshold);
@@ -1267,7 +1285,7 @@ BVIEW_STATUS sbplugin_ovsdb_bst_esp_threshold_set (int asic,
 }
 
 /*********************************************************************
-* @brief  Set profile configuration for Egress Unicast Queues 
+* @brief  Set profile configuration for Egress Unicast Queues
 *           Statistics
 *
 * @param[in] asic                        - unit
@@ -1282,25 +1300,25 @@ BVIEW_STATUS sbplugin_ovsdb_bst_esp_threshold_set (int asic,
 *
 *
 *********************************************************************/
-BVIEW_STATUS sbplugin_ovsdb_bst_eucq_threshold_set (int asic, 
-                                      int ucQueue, 
+BVIEW_STATUS sbplugin_ovsdb_bst_eucq_threshold_set (int asic,
+                                      int ucQueue,
                               BVIEW_BST_EGRESS_UC_QUEUE_THRESHOLD_t *thres)
 {
   BVIEW_STATUS           rv = BVIEW_STATUS_SUCCESS;
-  int                    port = 0, cosq = 0;
+  int                    port = 0;
 
    /*validate ASIC*/
   SB_OVSDB_VALID_UNIT_CHECK (asic);
 
   /* Check validity of input data*/
-  if (thres == NULL || 
+  if (thres == NULL ||
       BVIEW_BST_E_UC_THRESHOLD_CHECK (thres))
   {
     return BVIEW_STATUS_INVALID_PARAMETER;
   }
- 
-  /*  The BST_Threshold for the Egress UC Queues.*/ 
-  rv = bst_ovsdb_threshold_set (asic, port, cosq, 
+
+  /*  The BST_Threshold for the Egress UC Queues.*/
+  rv = bst_ovsdb_threshold_set (asic, port, ucQueue,
                                 SB_OVSDB_BST_STAT_ID_UCAST, thres->ucBufferThreshold);
   if (BVIEW_STATUS_SUCCESS != rv)
   {
@@ -1308,16 +1326,16 @@ BVIEW_STATUS sbplugin_ovsdb_bst_eucq_threshold_set (int asic,
                 "BST:ASIC(%d) Ucast Queue (%d):Failed to set Threshold", asic,ucQueue);
     return BVIEW_STATUS_FAILURE;
   }
-  
+
   return BVIEW_STATUS_SUCCESS;
 }
 
 /*********************************************************************
-* @brief  Set profile configuration for Egress Unicast Queue Groups 
-*           Statistics 
+* @brief  Set profile configuration for Egress Unicast Queue Groups
+*           Statistics
 *
 * @param[in]asic                          -unit
-* @param[in]ucQueueGrp                    -uc queue group 
+* @param[in]ucQueueGrp                    -uc queue group
 * @param[in]thres                         -Threshold data structure
 *
 * @retval BVIEW_STATUS_INVALID_PARAMETER if input data is invalid.
@@ -1328,11 +1346,11 @@ BVIEW_STATUS sbplugin_ovsdb_bst_eucq_threshold_set (int asic,
 *
 *
 *********************************************************************/
-BVIEW_STATUS sbplugin_ovsdb_bst_eucqg_threshold_set (int asic, 
-                                       int ucQueueGrp, 
+BVIEW_STATUS sbplugin_ovsdb_bst_eucqg_threshold_set (int asic,
+                                       int ucQueueGrp,
                                        BVIEW_BST_EGRESS_UC_QUEUEGROUPS_THRESHOLD_t *thres)
 {
-  BVIEW_STATUS           rv = BVIEW_STATUS_SUCCESS; 
+  BVIEW_STATUS           rv = BVIEW_STATUS_SUCCESS;
 
    /*validate ASIC*/
   SB_OVSDB_VALID_UNIT_CHECK (asic);
@@ -1342,10 +1360,10 @@ BVIEW_STATUS sbplugin_ovsdb_bst_eucqg_threshold_set (int asic,
       BVIEW_BST_E_UC_GRP_THRESHOLD_CHECK (thres))
   {
     return BVIEW_STATUS_INVALID_PARAMETER;
-  } 
+  }
 
   /*The BST_Threshold for the Egress UC Queue-Group */
-  rv = bst_ovsdb_threshold_set (asic, 0, ucQueueGrp, 
+  rv = bst_ovsdb_threshold_set (asic, 0, ucQueueGrp,
                                 SB_OVSDB_BST_STAT_ID_UCAST_GROUP, thres->ucBufferThreshold);
   if (BVIEW_STATUS_SUCCESS != rv)
   {
@@ -1353,12 +1371,12 @@ BVIEW_STATUS sbplugin_ovsdb_bst_eucqg_threshold_set (int asic,
                 "BST:ASIC(%d) Ucast Queue Group (%d):Failed to set Threshold", asic,ucQueueGrp);
     return BVIEW_STATUS_FAILURE;
   }
-  
+
   return BVIEW_STATUS_SUCCESS;
 }
 
 /*********************************************************************
-* @brief  Set profile configuration for Egress Multicast Queues 
+* @brief  Set profile configuration for Egress Multicast Queues
 *           Statistics
 *
 * @param[in] asic                     - unit
@@ -1373,25 +1391,25 @@ BVIEW_STATUS sbplugin_ovsdb_bst_eucqg_threshold_set (int asic,
 *
 *
 *********************************************************************/
-BVIEW_STATUS sbplugin_ovsdb_bst_emcq_threshold_set (int asic, 
-                                      int mcQueue, 
+BVIEW_STATUS sbplugin_ovsdb_bst_emcq_threshold_set (int asic,
+                                      int mcQueue,
                                       BVIEW_BST_EGRESS_MC_QUEUE_THRESHOLD_t *thres)
 {
-  BVIEW_STATUS           rv = BVIEW_STATUS_SUCCESS; 
-  int                    port = 0, cosq = 0;
+  BVIEW_STATUS           rv = BVIEW_STATUS_SUCCESS;
+  int                    port = 0;
 
    /*validate ASIC*/
   SB_OVSDB_VALID_UNIT_CHECK (asic);
 
   /* Check validity of input data*/
-  if (thres == NULL || 
+  if (thres == NULL ||
       BVIEW_BST_E_MC_THRESHOLD_CHECK (thres) ||
       BVIEW_BST_E_MC_QUEUE_THRESHOLD_CHECK (thres))
   {
     return BVIEW_STATUS_INVALID_PARAMETER;
-  } 
+  }
 
-  rv = bst_ovsdb_threshold_set (asic, port, cosq, 
+  rv = bst_ovsdb_threshold_set (asic, port, mcQueue,
                                 SB_OVSDB_BST_STAT_ID_MCAST, thres->mcBufferThreshold);
   if (BVIEW_STATUS_SUCCESS != rv)
   {
@@ -1403,7 +1421,7 @@ BVIEW_STATUS sbplugin_ovsdb_bst_emcq_threshold_set (int asic,
 }
 
 /*********************************************************************
-* @brief  Set profile configuration for Egress Egress CPU Queues 
+* @brief  Set profile configuration for Egress Egress CPU Queues
 *           Statistics
 *
 * @param[in] asic                        - unit
@@ -1418,8 +1436,8 @@ BVIEW_STATUS sbplugin_ovsdb_bst_emcq_threshold_set (int asic,
 *
 *
 *********************************************************************/
-BVIEW_STATUS sbplugin_ovsdb_bst_cpuq_threshold_set (int asic, 
-                                      int cpuQueue, 
+BVIEW_STATUS sbplugin_ovsdb_bst_cpuq_threshold_set (int asic,
+                                      int cpuQueue,
                                       BVIEW_BST_EGRESS_CPU_QUEUE_THRESHOLD_t *thres)
 {
   BVIEW_STATUS           rv = BVIEW_STATUS_SUCCESS;
@@ -1429,14 +1447,14 @@ BVIEW_STATUS sbplugin_ovsdb_bst_cpuq_threshold_set (int asic,
   SB_OVSDB_VALID_UNIT_CHECK (asic);
 
   /* Check validity of input data*/
-  if (thres == NULL || 
+  if (thres == NULL ||
       BVIEW_BST_E_CPU_THRESHOLD_CHECK (thres))
      /* BVIEW_BST_E_CPU_QUEUE_THRESHOLD_CHECK (thres))*/
   {
     return BVIEW_STATUS_INVALID_PARAMETER;
-  } 
+  }
 
-  rv = bst_ovsdb_threshold_set (asic, port, cpuQueue, 
+  rv = bst_ovsdb_threshold_set (asic, port, cpuQueue,
                                 SB_OVSDB_BST_STAT_ID_CPU_QUEUE, thres->cpuBufferThreshold);
   if (SB_OVSDB_RV_ERROR (rv))
   {
@@ -1444,12 +1462,12 @@ BVIEW_STATUS sbplugin_ovsdb_bst_cpuq_threshold_set (int asic,
                 "BST:ASIC(%d) CPU Queue (%d):Failed to set Threshold", asic,cpuQueue);
     return BVIEW_STATUS_FAILURE;
   }
-  
+
   return BVIEW_STATUS_SUCCESS;
 }
 
 /*********************************************************************
-* @brief  Set profile configuration for Egress Egress RQE Queues 
+* @brief  Set profile configuration for Egress Egress RQE Queues
 *           Statistics
 *
 * @param[in]    asic                   - unit
@@ -1464,8 +1482,8 @@ BVIEW_STATUS sbplugin_ovsdb_bst_cpuq_threshold_set (int asic,
 *
 *
 *********************************************************************/
-BVIEW_STATUS sbplugin_ovsdb_bst_rqeq_threshold_set (int asic, 
-                                     int rqeQueue, 
+BVIEW_STATUS sbplugin_ovsdb_bst_rqeq_threshold_set (int asic,
+                                     int rqeQueue,
                                      BVIEW_BST_EGRESS_RQE_QUEUE_THRESHOLD_t *thres)
 {
   BVIEW_STATUS           rv = BVIEW_STATUS_SUCCESS;
@@ -1474,15 +1492,15 @@ BVIEW_STATUS sbplugin_ovsdb_bst_rqeq_threshold_set (int asic,
   SB_OVSDB_VALID_UNIT_CHECK (asic);
 
   /* Check validity of input data*/
-  if (thres == NULL || 
-      BVIEW_BST_E_RQE_THRESHOLD_CHECK (thres)) 
+  if (thres == NULL ||
+      BVIEW_BST_E_RQE_THRESHOLD_CHECK (thres))
     /*  BVIEW_BST_E_RQE_QUEUE_THRESHOLD_CHECK (thres))*/
   {
     return BVIEW_STATUS_INVALID_PARAMETER;
   }
 
-  /* Get Threshold configuration for RQE queues*/ 
-  rv = bst_ovsdb_threshold_set (asic, 0, rqeQueue, 
+  /* Get Threshold configuration for RQE queues*/
+  rv = bst_ovsdb_threshold_set (asic, 0, rqeQueue,
                       SB_OVSDB_BST_STAT_ID_RQE_QUEUE, thres->rqeBufferThreshold);
   if (SB_OVSDB_RV_ERROR (rv))
   {
@@ -1495,7 +1513,7 @@ BVIEW_STATUS sbplugin_ovsdb_bst_rqeq_threshold_set (int asic,
 
 /*********************************************************************
 * @brief  Clear stats
-*           
+*
 * @param[in]   asic                                    - unit
 *
 * @retval BVIEW_STATUS_INVALID_PARAMETER if input data is invalid.
@@ -1508,11 +1526,14 @@ BVIEW_STATUS sbplugin_ovsdb_bst_rqeq_threshold_set (int asic,
 *********************************************************************/
 BVIEW_STATUS  sbplugin_ovsdb_bst_clear_stats(int asic)
 {
-  return BVIEW_STATUS_SUCCESS; 
+  /*validate ASIC*/
+  SB_OVSDB_VALID_UNIT_CHECK (asic);
+
+  return  bst_ovsdb_clear_stats(asic);
 }
 
 /*********************************************************************
-* @brief  Restore threshold configuration 
+* @brief  Restore threshold configuration
 *
 * @param   asic                                    - unit
 *
@@ -1526,29 +1547,42 @@ BVIEW_STATUS  sbplugin_ovsdb_bst_clear_stats(int asic)
 *********************************************************************/
 BVIEW_STATUS  sbplugin_ovsdb_bst_clear_thresholds  (int asic)
 {
-  return BVIEW_STATUS_SUCCESS;
+  /*validate ASIC*/
+  SB_OVSDB_VALID_UNIT_CHECK (asic);
+
+  return bst_ovsdb_clear_thresholds(asic);
 }
 
 /*********************************************************************
 * @brief  Register hw trigger callback
 *
 * @param   asic                              - unit
-* @param   callback                          - function to be called 
+* @param   callback                          - function to be called
 *                                              when trigger happens
 * @param   cookie                            - user data
-* 
+*
 * @retval BVIEW_STATUS_INVALID_PARAMETER if input data is invalid.
 * @retval BVIEW_STATUS_FAILURE           if restore is succes.
 * @retval BVIEW_STATUS_SUCCESS           if restore set is failed.
 *
-* @notes    callback will be executed in driver thread so post the data 
+* @notes    callback will be executed in driver thread so post the data
 *           to respective task.
 *
 *********************************************************************/
-BVIEW_STATUS  sbplugin_ovsdb_bst_register_trigger (int asic, 
-                                        BVIEW_BST_TRIGGER_CALLBACK_t callback, 
+BVIEW_STATUS  sbplugin_ovsdb_bst_register_trigger (int asic,
+                                        BVIEW_BST_TRIGGER_CALLBACK_t callback,
                                         void *cookie)
 {
+  BVIEW_STATUS rv = BVIEW_STATUS_SUCCESS;
+
+  rv = bst_ovsdb_bst_register_trigger (asic, callback, cookie);
+  if (SB_OVSDB_RV_ERROR (rv))
+  {
+    SB_OVSDB_DEBUG_PRINT (
+                "BST:ASIC(%d) Failed to Register trigger callback", asic);
+    return BVIEW_STATUS_FAILURE;
+  }
+
   return BVIEW_STATUS_SUCCESS;
 }
 
@@ -1569,13 +1603,13 @@ BVIEW_STATUS  sbplugin_ovsdb_bst_register_trigger (int asic,
 *
 *
 *********************************************************************/
-BVIEW_STATUS sbplugin_ovsdb_bst_threshold_get (int asic, 
+BVIEW_STATUS sbplugin_ovsdb_bst_threshold_get (int asic,
                               BVIEW_BST_ASIC_SNAPSHOT_DATA_t *data,
                               BVIEW_TIME_t *time)
 {
   unsigned int           port = 0;
   unsigned int           index =0;
-  BVIEW_STATUS           rv = BVIEW_STATUS_SUCCESS;                   
+  BVIEW_STATUS           rv = BVIEW_STATUS_SUCCESS;
 
    /*validate ASIC*/
   SB_OVSDB_VALID_UNIT_CHECK (asic);
@@ -1587,46 +1621,46 @@ BVIEW_STATUS sbplugin_ovsdb_bst_threshold_get (int asic,
   sbplugin_ovsdb_system_time_get (time);
 
   /* Device wide threshold configuration*/
-  rv = bst_ovsdb_threshold_get(asic, 0, 0, 
+  rv = bst_ovsdb_threshold_get(asic, 0, 0,
                                SB_OVSDB_BST_STAT_ID_DEVICE, &data->device.bufferCount);
   if (BVIEW_STATUS_SUCCESS != rv)
   {
     return BVIEW_STATUS_FAILURE;
   }
 
-  /* Get port based thresholds*/ 
+  /* Get port based thresholds*/
   BVIEW_BST_PORT_ITER (asic, port)
   {
     BVIEW_BST_PG_ITER (asic, index)
-    { 
-      /* Get threshold configuration of The BST_Threshold for the (Ingress Port, PG) 
+    {
+      /* Get threshold configuration of The BST_Threshold for the (Ingress Port, PG)
        * UC plus MC Shared use-count in units of buffers.
        */
-      rv = bst_ovsdb_threshold_get (asic, port, index, 
-                                    SB_OVSDB_BST_STAT_ID_PRI_GROUP_SHARED, 
+      rv = bst_ovsdb_threshold_get (asic, port, index,
+                                    SB_OVSDB_BST_STAT_ID_PRI_GROUP_SHARED,
                                     &data->iPortPg.data[port - 1][index].umShareBufferCount);
       if (BVIEW_STATUS_SUCCESS != rv)
       {
         return BVIEW_STATUS_FAILURE;
       }
-      /* Get threshold for headroom The BST_Threshold for the (Ingress Port, PG) 
+      /* Get threshold for headroom The BST_Threshold for the (Ingress Port, PG)
        * UC plus MC Headroom use-count in units of buffers
        */
-      rv = bst_ovsdb_threshold_get (asic, port, index, 
-                                    SB_OVSDB_BST_STAT_ID_PRI_GROUP_HEADROOM, 
+      rv = bst_ovsdb_threshold_get (asic, port, index,
+                                    SB_OVSDB_BST_STAT_ID_PRI_GROUP_HEADROOM,
                                     &data->iPortPg.data[port - 1][index].umHeadroomBufferCount);
       if (BVIEW_STATUS_SUCCESS != rv)
       {
         return BVIEW_STATUS_FAILURE;
       }
     }
-    
-    /*Get threshold configuration for The BST_Threshold for the (Ingress Port, SP) 
+
+    /*Get threshold configuration for The BST_Threshold for the (Ingress Port, SP)
      * UC plus MC shared use-count in units of buffers.
-     */  
+     */
     BVIEW_BST_SP_ITER (asic, index)
     {
-      rv = bst_ovsdb_threshold_get(asic, port, index, 
+      rv = bst_ovsdb_threshold_get(asic, port, index,
                                    SB_OVSDB_BST_STAT_ID_PORT_POOL,
                                    &data->iPortSp.data[port - 1][index].umShareBufferCount);
       if (BVIEW_STATUS_SUCCESS != rv)
@@ -1637,10 +1671,10 @@ BVIEW_STATUS sbplugin_ovsdb_bst_threshold_get (int asic,
 
     BVIEW_BST_SP_ITER (asic, index)
     {
-      /* The BST_Threshold for the Egress Per (Port, SP) 
+      /* The BST_Threshold for the Egress Per (Port, SP)
        * UC shared use-count in units of 8 buffers */
-      rv = bst_ovsdb_threshold_get (asic, port, index, 
-                                    SB_OVSDB_BST_STAT_ID_EGR_UCAST_PORT_SHARED, 
+      rv = bst_ovsdb_threshold_get (asic, port, index,
+                                    SB_OVSDB_BST_STAT_ID_EGR_UCAST_PORT_SHARED,
                                     &data->ePortSp.data[port - 1][index].ucShareBufferCount);
       if (BVIEW_STATUS_SUCCESS != rv)
       {
@@ -1648,8 +1682,8 @@ BVIEW_STATUS sbplugin_ovsdb_bst_threshold_get (int asic,
       }
 
       /* Get threshold configuration for egress based port shared buffers*/
-      rv = bst_ovsdb_threshold_get (asic, port, index, 
-                                    SB_OVSDB_BST_STAT_ID_EGR_PORT_SHARED, 
+      rv = bst_ovsdb_threshold_get (asic, port, index,
+                                    SB_OVSDB_BST_STAT_ID_EGR_PORT_SHARED,
                                     &data->ePortSp.data[port - 1][index].umShareBufferCount);
       if (BVIEW_STATUS_SUCCESS != rv)
       {
@@ -1657,35 +1691,36 @@ BVIEW_STATUS sbplugin_ovsdb_bst_threshold_get (int asic,
       }
     }
   }
- 
-  /* Get threshold configuration for The BST_Threshold for the Egress MC Queues in units of buffers.*/
-  BVIEW_BST_MC_QUEUE_ITER (asic,index)
-  {
-    rv = bst_ovsdb_threshold_get (asic, port, index,
+
+    /* Get threshold configuration for The BST_Threshold for the Egress MC Queues in units of buffers.*/
+    BVIEW_BST_MC_QUEUE_ITER (asic,index)
+    {
+      rv = bst_ovsdb_threshold_get (asic, port, index,
                                     SB_OVSDB_BST_STAT_ID_MCAST,
                                     &data->eMcQ.data[index].mcBufferCount);
-    if (SB_OVSDB_RV_ERROR (rv))
-    {
+      if (SB_OVSDB_RV_ERROR (rv))
+      {
         return BVIEW_STATUS_FAILURE;
+      }
+
+      data->eMcQ.data[index].port = 0;
     }
-    data->eMcQ.data[index].port = 0;
-  }
     /* Get threshold configuration for The BST_Threshold for the Egress UC Queues in units of 8 buffers.*/
-  BVIEW_BST_UC_QUEUE_ITER (asic,index)
-  {
-    rv = bst_ovsdb_threshold_get (asic, port, index,
-          SB_OVSDB_BST_STAT_ID_UCAST, &data->eUcQ.data[index].ucBufferCount);
-    if (BVIEW_STATUS_SUCCESS != rv)
+    BVIEW_BST_UC_QUEUE_ITER (asic,index)
     {
+      rv = bst_ovsdb_threshold_get (asic, port, index,
+          SB_OVSDB_BST_STAT_ID_UCAST, &data->eUcQ.data[index].ucBufferCount);
+      if (BVIEW_STATUS_SUCCESS != rv)
+      {
         return BVIEW_STATUS_FAILURE;
+      }
+      data->eUcQ.data[index].port =  0;
     }
-    data->eUcQ.data[index].port = 0;
-  }
- 
+
   BVIEW_BST_SP_ITER (asic, index)
   {
     /*  BST_Threshold for each of the 4 Egress SPs Shared use-counts in units of buffers.*/
-    rv = bst_ovsdb_threshold_get (asic, 0, index, 
+    rv = bst_ovsdb_threshold_get (asic, 0, index,
             SB_OVSDB_BST_STAT_ID_EGR_POOL, &data->eSp.data[index].umShareBufferCount);
     if (BVIEW_STATUS_SUCCESS != rv)
     {
@@ -1693,7 +1728,7 @@ BVIEW_STATUS sbplugin_ovsdb_bst_threshold_get (int asic,
     }
 
     /*  BST_Threshold for each of the 4 Egress SPs Shared use-counts in units of buffers.*/
-    rv = bst_ovsdb_threshold_get (asic, 0, index, 
+    rv = bst_ovsdb_threshold_get (asic, 0, index,
             SB_OVSDB_BST_STAT_ID_EGR_MCAST_POOL, &data->eSp.data[index].mcShareBufferCount);
     if (BVIEW_STATUS_SUCCESS != rv)
     {
@@ -1701,12 +1736,12 @@ BVIEW_STATUS sbplugin_ovsdb_bst_threshold_get (int asic,
     }
   }
 
-  /* Get threshold configuration for The BST_Threshold for the Ingress 
+  /* Get threshold configuration for The BST_Threshold for the Ingress
    * SP UC plus MC use-count in units of buffers.
   */
   BVIEW_BST_SP_ITER (asic, index)
   {
-    rv = bst_ovsdb_threshold_get (asic, 0, index, 
+    rv = bst_ovsdb_threshold_get (asic, 0, index,
               SB_OVSDB_BST_STAT_ID_ING_POOL, &data->iSp.data[index].umShareBufferCount);
     if (BVIEW_STATUS_SUCCESS != rv)
     {
@@ -1717,7 +1752,7 @@ BVIEW_STATUS sbplugin_ovsdb_bst_threshold_get (int asic,
   /* Get thresholds for The BST_Threshold for the Egress CPU queues in units of buffers*/
   BVIEW_BST_CPU_QUEUE_ITER (asic, index)
   {
-    rv = bst_ovsdb_threshold_get (asic, port, index, 
+    rv = bst_ovsdb_threshold_get (asic, port, index,
                    SB_OVSDB_BST_STAT_ID_CPU_QUEUE, &data->cpqQ.data[index].cpuBufferCount);
     if (BVIEW_STATUS_SUCCESS != rv)
     {
@@ -1725,23 +1760,23 @@ BVIEW_STATUS sbplugin_ovsdb_bst_threshold_get (int asic,
     }
   }
 
-  /* Get Thresholds for BST_Threshold for each of the 11 RQE queues 
+  /* Get Thresholds for BST_Threshold for each of the 11 RQE queues
    * total use-counts in units of buffers.
   */
   BVIEW_BST_RQE_QUEUE_ITER (asic, index)
   {
-    rv = bst_ovsdb_threshold_get (asic, 0, index, SB_OVSDB_BST_STAT_ID_RQE_QUEUE, 
+    rv = bst_ovsdb_threshold_get (asic, 0, index, SB_OVSDB_BST_STAT_ID_RQE_QUEUE,
                                   &data->rqeQ.data[index].rqeBufferCount);
     if (SB_OVSDB_RV_ERROR (rv))
     {
       return BVIEW_STATUS_FAILURE;
     }
-  } 
+  }
 
   /* Get Thresholds for BST_Threshold for each of the 128 Egress Unicast queue groups*/
   BVIEW_BST_UC_QUEUE_GRP_ITER (asic, index)
   {
-    rv = bst_ovsdb_threshold_get (asic, 0, index, 
+    rv = bst_ovsdb_threshold_get (asic, 0, index,
                                  SB_OVSDB_BST_STAT_ID_UCAST_GROUP, &data->eUcQg.data[index].ucBufferCount);
     if (SB_OVSDB_RV_ERROR (rv))
     {
@@ -1751,35 +1786,6 @@ BVIEW_STATUS sbplugin_ovsdb_bst_threshold_get (int asic,
 
   return BVIEW_STATUS_SUCCESS;
 }
-
-                                                                                        
-#if 0
-/*********************************************************************
-* @brief  callback function to process Hw trigers
-*
-*
-* @param  [in]  asic                         - unit
-* @param  [in]  event                        - Event
-* @param  [bid] bid                          - BST stat 
-* @param  [port] Port                        - Port ID
-* @param  [cosq] COSQ                        - cosq
-* @param  [in,out] cookie                    - User data 
-*
-* @retval BVIEW_STATUS_INVALID_PARAMETER if input data is invalid.
-* @retval BVIEW_STATUS_FAILURE           if HW trigger process is success.
-* @retval BVIEW_STATUS_SUCCESS           if failed to handle trigger.
-*
-* @notes    none
-*
-*
-*********************************************************************/
-BVIEW_STATUS sbplugin_ovsdb_bst_callback (int asic, SB_OVSDB_SWITCH_EVENT_t event, 
-                       int bid, int port, int cosq, void *cookie)
-{
-  return BVIEW_STATUS_SUCCESS;
-}
-
-#endif
 /*********************************************************************
 * @brief  OVSDB BST feature init
 *
@@ -1833,7 +1839,7 @@ BVIEW_STATUS sbplugin_ovsdb_bst_init (BVIEW_SB_BST_FEATURE_t *ovsdbBstFeat)
   ovsdbBstFeat->bst_clear_stats_cb          = sbplugin_ovsdb_bst_clear_stats;
   ovsdbBstFeat->bst_clear_thresholds_cb     = sbplugin_ovsdb_bst_clear_thresholds;
   ovsdbBstFeat->bst_register_trigger_cb     = sbplugin_ovsdb_bst_register_trigger;
-  
+
 
   if ((rv = sbplugin_ovsdb_bst_infra_init ())!= BVIEW_STATUS_SUCCESS)
   {

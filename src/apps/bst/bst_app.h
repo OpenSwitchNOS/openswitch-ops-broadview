@@ -54,9 +54,9 @@ extern "C" {
 
 /* Default values for BST configurations */
   /* bst enable */
-#define BVIEW_BST_DEFAULT_ENABLE    false  
+#define BVIEW_BST_DEFAULT_ENABLE   false  
 
-#define BVIEW_BST_PERIODIC_REPORT_DEFAULT false
+#define BVIEW_BST_PERIODIC_REPORT_DEFAULT false 
   /* default bst collection interval.
      */
 #define BVIEW_BST_DEFAULT_INTERVAL  60
@@ -65,17 +65,18 @@ extern "C" {
 #define BVIEW_BST_DEFAULT_TRACK_INGRESS   true
 #define BVIEW_BST_DEFAULT_TRACK_EGRESS    true
 #define BVIEW_BST_DEFAULT_TRACK_DEVICE    true
+#define BVIEW_BST_DEFAULT_PLUGIN_INTERVAL 5
 
-#define BVIEW_BST_DEFAULT_TRACK_IN_P_PG      true
-#define BVIEW_BST_DEFAULT_TRACK_IN_P_SP      true
-#define BVIEW_BST_DEFAULT_TRACK_IN_SP        true
-#define BVIEW_BST_DEFAULT_TRACK_E_P_SP       true
-#define BVIEW_BST_DEFAULT_TRACK_E_SP         true
-#define BVIEW_BST_DEFAULT_TRACK_E_UC_Q       true
-#define BVIEW_BST_DEFAULT_TRACK_E_UC_QG      true
-#define BVIEW_BST_DEFAULT_TRACK_E_MC_Q       true
-#define BVIEW_BST_DEFAULT_TRACK_E_CPU_Q      true
-#define BVIEW_BST_DEFAULT_TRACK_E_RQE_Q      true
+#define BVIEW_BST_DEFAULT_TRACK_IN_P_PG      false
+#define BVIEW_BST_DEFAULT_TRACK_IN_P_SP      false
+#define BVIEW_BST_DEFAULT_TRACK_IN_SP        false
+#define BVIEW_BST_DEFAULT_TRACK_E_P_SP       false
+#define BVIEW_BST_DEFAULT_TRACK_E_SP         false
+#define BVIEW_BST_DEFAULT_TRACK_E_UC_Q       false
+#define BVIEW_BST_DEFAULT_TRACK_E_UC_QG      false
+#define BVIEW_BST_DEFAULT_TRACK_E_MC_Q       false
+#define BVIEW_BST_DEFAULT_TRACK_E_CPU_Q      false
+#define BVIEW_BST_DEFAULT_TRACK_E_RQE_Q      false
 #define BVIEW_BST_DEFAULT_TRACK_MODE         BVIEW_BST_MODE_CURRENT
 
 #define BVIEW_BST_DEFAULT_MAX_TRIGGERS 1
@@ -171,6 +172,11 @@ typedef enum _bst_cmd_ {
   BVIEW_BST_CMD_API_CLEAR_TRIGGER_COUNT,
   BVIEW_BST_CMD_API_ENABLE_BST_ON_TRIGGER,
   BVIEW_BST_CMD_API_TRIGGER_COLLECT,
+
+ /* update config group */
+  BVIEW_BST_CMD_API_UPDATE_TRACK,
+  BVIEW_BST_CMD_API_UPDATE_FEATURE,
+
   BVIEW_BST_CMD_API_MAX
 }BVIEW_FEATURE_BST_CMD_API_t;
 
@@ -1004,6 +1010,34 @@ BVIEW_STATUS bst_enable_on_trigger(BVIEW_BST_REQUEST_MSG_t *msg_data, int bstEna
 *
 *********************************************************************/
 BVIEW_STATUS bst_enable_on_trigger_timer_expiry (BVIEW_BST_REQUEST_MSG_t * msg_data);
+BVIEW_STATUS bst_update_config_set(BVIEW_BST_REQUEST_MSG_t * msg_data);
+
+/*********************************************************************
+* @brief  Prepare MASK of ream's
+*
+* @param[in]   data                    - Pointer to BST config
+* @param[in]   config                  - Pointer to OVSDB config
+*
+* @notes    none
+*
+*
+*********************************************************************/
+void bst_realm_to_mask (BVIEW_BST_TRACK_PARAMS_t *data,
+                                int *mask);
+
+/*********************************************************************
+* @brief  Prepare MASK of ream's
+*
+* @param[in]   data                    - Pointer to BST config
+* @param[in]   config                  - Pointer to OVSDB config
+*
+* @notes    none
+*
+*
+*********************************************************************/
+void bst_mask_to_realm (int trackingMask,
+                        BVIEW_BST_TRACK_PARAMS_t *data);
+
 
 #ifdef __cplusplus
 }

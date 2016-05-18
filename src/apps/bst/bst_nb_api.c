@@ -692,4 +692,46 @@ BVIEW_STATUS bstjson_get_bst_tracking_impl (void *cookie, int asicId, int id,
   return rv;
 }
 
+/*********************************************************************
+* @brief : API handler to send updates to BST 
+*
+* @param[in] asicId : asic id 
+* @param[in] type     : config change notification type
+*
+* @retval  : BVIEW_STATUS_SUCCESS : the message is successfully posted to bst queue.
+* @retval  : BVIEW_STATUS_FAILURE : failed to post the message to bst.
+* @retval  : BVIEW_STATUS_INVALID_PARAMETER : invalid parameter.
+*
+* @note    : This api posts the request to bst application.
+*
+*********************************************************************/
+BVIEW_STATUS bst_notify_config_change (int asicId, int id)
+{
+  BVIEW_BST_REQUEST_MSG_t msg_data;
+  BVIEW_STATUS rv;
+
+  if ((id != BVIEW_BST_CONFIG_FEATURE_UPDATE) && 
+      (id != BVIEW_BST_CONFIG_TRACK_UPDATE))
+    return BVIEW_STATUS_INVALID_PARAMETER;
+
+  memset (&msg_data, 0, sizeof (BVIEW_BST_REQUEST_MSG_t));
+  msg_data.unit = asicId;
+  if (id == BVIEW_BST_CONFIG_TRACK_UPDATE)
+  {
+    msg_data.msg_type = BVIEW_BST_CMD_API_UPDATE_TRACK;
+  }
+ 
+  if (id == BVIEW_BST_CONFIG_FEATURE_UPDATE)
+  {
+    msg_data.msg_type = BVIEW_BST_CMD_API_UPDATE_FEATURE;
+  }
+  /* send message to bst application */
+  rv = bst_send_request (&msg_data);
+  if (BVIEW_STATUS_SUCCESS != rv)
+  {
+    LOG_POST (BVIEW_LOG_ERROR,
+        "failed to post get bst tracking to bst queue. err = %d.\r\n",rv);
+  }
+  return rv;
+}
 

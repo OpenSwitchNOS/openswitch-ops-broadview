@@ -208,7 +208,18 @@ typedef struct _bst_config_
     BVIEW_BST_COLLECTION_MODE mode;
     /*Periodic collection*/
     bool enablePeriodicCollection;
-    int  collectionPeriod;
+    int collectionPeriod;
+    int statsInPercentage;
+    int statUnitsInCells;
+    int bstMaxTriggers;
+    int sendSnapshotOnTrigger;
+    int triggerTransmitInterval;
+    int sendIncrementalReport;
+
+    /* Tracking configurations*/
+    int trackMask;
+    bool trackInit;
+
 } BVIEW_BST_CONFIG_t;
 
 /* Trigger Type */
@@ -423,6 +434,32 @@ typedef BVIEW_STATUS(*BVIEW_BST_TRIGGER_CALLBACK_t) (int asic,
 #define BVIEW_BST_EGRESS_UC_THRESHOLD_CHECK(_p)  ((_p)->ucThreshold <= 0 || \
                                               (_p)->ucThreshold > (0x1FFFF * 208))
 
+
+
+
+/* threshold types */
+typedef enum _bst_realm_ {
+  BVIEW_BST_DEVICE = 1,
+  BVIEW_BST_EGRESS_PORT_SP,
+  BVIEW_BST_EGRESS_SP,
+  BVIEW_BST_EGRESS_UC_QUEUE,
+  BVIEW_BST_EGRESS_UC_QUEUEGROUPS,
+  BVIEW_BST_EGRESS_MC_QUEUE,
+  BVIEW_BST_EGRESS_CPU_QUEUE,
+  BVIEW_BST_EGRESS_RQE_QUEUE,
+  BVIEW_BST_INGRESS_PORT_PG,
+  BVIEW_BST_INGRESS_PORT_SP,
+  BVIEW_BST_INGRESS_SP,
+  BVIEW_BST_COUNT
+}BVIEW_BST_REALM_ID_t;
+
+#define BVIEW_BST_REALM_ID_MIN BVIEW_BST_DEVICE
+#define BVIEW_BST_REALM_ID_MAX BVIEW_BST_COUNT
+
+#define BVIEW_BST_CONFIG_FEATURE_UPDATE 1
+#define BVIEW_BST_CONFIG_TRACK_UPDATE 1
+
+
 /*****************************************************************//**
 * @brief : function to creathe the bst application thread.
 *
@@ -482,7 +519,23 @@ BVIEW_STATUS bst_app_main(void);
 *********************************************************************/
 BVIEW_STATUS bst_app_config_init(unsigned int num_units);
 
-       
+
+BVIEW_STATUS bst_plugin_cb(void *request);
+/*********************************************************************
+* @brief : API handler to send updates to BST
+*
+* @param[in] asicId : asic id
+* @param[in] type     : config change notification type
+*
+* @retval  : BVIEW_STATUS_SUCCESS : the message is successfully posted to bst queue.
+* @retval  : BVIEW_STATUS_FAILURE : failed to post the message to bst.
+* @retval  : BVIEW_STATUS_INVALID_PARAMETER : invalid parameter.
+*
+* @note    : This api posts the request to bst application.
+*
+*********************************************************************/
+BVIEW_STATUS bst_notify_config_change (int asicId, int id);
+      
 #ifdef __cplusplus
 }
 #endif

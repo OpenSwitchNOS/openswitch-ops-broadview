@@ -36,6 +36,7 @@ typedef struct _bst_ovsdb_bid_params_
   int      num_of_columns;      /* Number of columns*/
   int      size;                /* size of database for BID */
   size_t   offset;              /* offset to BID database */
+  uint64_t default_threshold;   /* default threshold */
 } BVIEW_BST_OVSDB_BID_PARAMS_t;
 
 
@@ -149,6 +150,74 @@ BVIEW_STATUS bst_ovsdb_bst_config_get(int asic,
                                       BVIEW_OVSDB_CONFIG_DATA_t *config);
 
 /*********************************************************************
+* @brief  Restore threshold configuration
+*
+* @param   asic                                    - unit
+*
+* @retval BVIEW_STATUS_INVALID_PARAMETER if input data is invalid.
+* @retval BVIEW_STATUS_FAILURE           if restore is succes.
+* @retval BVIEW_STATUS_SUCCESS           if restore set is failed.
+*
+* @notes    none
+*
+*
+*********************************************************************/
+BVIEW_STATUS  bst_ovsdb_clear_thresholds  (int asic);
+
+/*********************************************************************
+* @brief  Restore threshold configuration
+*
+* @param   asic                                    - unit
+* @param   name                                    - Row Name
+*
+* @retval BVIEW_STATUS_INVALID_PARAMETER if input data is invalid.
+* @retval BVIEW_STATUS_FAILURE           if restore is succes.
+* @retval BVIEW_STATUS_SUCCESS           if restore set is failed.
+*
+* @notes    none
+*
+*
+*********************************************************************/
+BVIEW_STATUS  bst_ovsdb_trigger_callback (int asic,
+                                          int bid,
+                                          int port,
+                                          int queue);
+
+/*********************************************************************
+* @brief  Register hw trigger callback
+*
+* @param   asic                              - unit
+* @param   callback                          - function to be called
+*                                              when trigger happens
+* @param   cookie                            - user data
+*
+* @retval BVIEW_STATUS_INVALID_PARAMETER if input data is invalid.
+* @retval BVIEW_STATUS_FAILURE           if restore is succes.
+* @retval BVIEW_STATUS_SUCCESS           if restore set is failed.
+*
+* @notes    callback will be executed in driver thread so post the data
+*           to respective task.
+*
+*********************************************************************/
+BVIEW_STATUS  bst_ovsdb_bst_register_trigger (int asic,
+                                        BVIEW_BST_TRIGGER_CALLBACK_t callback,
+                                        void *cookie);
+/*********************************************************************
+* @brief  Clear stats
+*
+* @param[in]   asic                                    - unit
+*
+* @retval BVIEW_STATUS_INVALID_PARAMETER if input data is invalid.
+* @retval BVIEW_STATUS_FAILURE           if clear stats is succes.
+* @retval BVIEW_STATUS_SUCCESS           if clear stats is failed.
+*
+* @notes    none
+*
+*
+*********************************************************************/
+BVIEW_STATUS  bst_ovsdb_clear_stats(int asic);
+
+/*********************************************************************
 * @brief   Set BST Config BST ovsdb DB
 *
 * @param[in]   asic     -  asic number   
@@ -183,6 +252,22 @@ BVIEW_STATUS bst_ovsdb_bst_config_set(int asic,
 *********************************************************************/
 BVIEW_STATUS bst_ovsdb_resolve_index(int asic, int bid, int port,
                                      int index, int *db_index);
+
+/*********************************************************************
+* @brief  Clear stats
+*
+* @param[in]  bid                            - BID
+* @param[out] threshold                     - default threshold
+*
+* @retval BVIEW_STATUS_INVALID_PARAMETER if input data is invalid.
+* @retval BVIEW_STATUS_SUCCESS           if clear stats is failed.
+*
+* @notes    none
+*
+*
+*********************************************************************/
+BVIEW_STATUS bst_ovsdb_default_threshold_get (int bid,
+                                              uint64_t *threshold);
 
 /*********************************************************************
 * @brief   Dumps BST BID table parameter. 

@@ -61,6 +61,30 @@ extern "C"
             }                                                                       \
           }
 
+/* Macro to acquire lock */
+#define REST_SERVER_LOCK_TAKE(_mylock)                                              \
+         {                                                                           \
+            if (0 != pthread_mutex_lock (&_mylock))                                  \
+            {                                                                        \
+              LOG_POST (BVIEW_LOG_ERROR,                                             \
+                 "Failed to take the rest server lock \r\n");                \
+               return BVIEW_STATUS_FAILURE;                                          \
+            }                                                                        \
+        }
+/*  to release lock*/
+#define REST_SERVER_LOCK_GIVE(_mylock)                                               \
+          {                                                                          \
+            if (0 != pthread_mutex_unlock(&_mylock))                                 \
+            {                                                                        \
+               LOG_POST (BVIEW_LOG_ERROR,                                            \
+                "Failed to Release the rest server lock.\r\n");                      \
+                return BVIEW_STATUS_FAILURE;                                         \
+             }                                                                       \
+          }
+
+
+
+
 
 typedef struct _rest_config_
 {
@@ -216,6 +240,8 @@ BVIEW_STATUS rest_get_id_from_request(char * jsonBuffer, int bufLength, int *id)
 
 
 int rest_agent_config_params_modify(char *ipaddr, unsigned int clientPort);
+BVIEW_STATUS rest_server_port_dynamic_update(int localPort);
+BVIEW_STATUS rest_server_socket_create(int *listenFd);
 
 #ifdef	__cplusplus
 }

@@ -38,6 +38,7 @@ extern "C"
 /* Structure to pass API parameters to the BST APP */
 typedef struct _bstjson_configure_bst_tracking_
 {
+    int trackMask;
     int trackPeakStats;
     int trackIngressPortPriorityGroup;
     int trackIngressPortServicePool;
