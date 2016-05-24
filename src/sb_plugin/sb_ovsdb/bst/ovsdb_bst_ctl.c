@@ -423,8 +423,13 @@ bst_ovsdb_cache_update_table(const char *table_name, struct json *table_update,
       {
         if (strcmp("triggered", status->u.string) == 0)
         {
+          /*
+           The indexing for the params like
+           queue, queue-group etc starts from
+           1 in the driver.
+          */
           bst_ovsdb_trigger_callback (hw_unit_id->u.integer,
-            bid, port, queue);
+            bid, port, queue-1);
         }
       }
      }
