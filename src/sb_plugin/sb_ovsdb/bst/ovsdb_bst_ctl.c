@@ -50,9 +50,10 @@ extern BVIEW_BST_OVSDB_BID_PARAMS_t  bid_tab_params[SB_OVSDB_BST_STAT_ID_MAX_COU
 #define   BST_OVSDB_CLEAR_THRESHOLDS_JSON  "[\"OpenSwitch\",{\"op\":\"update\",\"table\":\"bufmon\",\"row\":{\"trigger_threshold\":[\"set\",[]]},\"where\":[[\"hw_unit_id\",\"==\",%d]]}]"
 #define   BST_OVSDB_CLEAR_STATS_JSON  "[\"OpenSwitch\",{\"op\":\"update\",\"table\":\"bufmon\",\"row\":{\"counter_value\":0},\"where\":[[\"hw_unit_id\",\"==\",%d]]}]"
 
-#define    BST_JSON_TRACKING_FORMAT "[\"OpenSwitch\",{\"op\":\"update\",\"table\":\"bufmon\",\"row\":{\"enabled\":%s},\"where\":[[\"counter_vendor_specific_info\",\"includes\", [\"map\",[[\"realm\",\"%s\"]]]]]}]"
+#define    BST_JSON_TRACKING_FORMAT_ENABLE "[\"OpenSwitch\",{\"op\":\"update\",\"table\":\"bufmon\",\"row\":{\"enabled\":true},\"where\":[[\"counter_vendor_specific_info\",\"includes\", [\"map\",[[\"realm\",\"%s\"]]]]]}]"
 
 
+#define    BST_JSON_TRACKING_FORMAT_DISABLE "[\"OpenSwitch\",{\"op\":\"update\",\"table\":\"bufmon\",\"row\":{\"enabled\":[\"set\",[]]},\"where\":[[\"counter_vendor_specific_info\",\"includes\", [\"map\",[[\"realm\",\"%s\"]]]]]}]"
 static char system_table_uuid[OVSDB_UUID_SIZE];
 #define  BST_NUM_MONITOR_TABLES              2
 const char *bst_table_name[BST_NUM_MONITOR_TABLES] = {"bufmon", "System"};
@@ -423,8 +424,13 @@ bst_ovsdb_cache_update_table(const char *table_name, struct json *table_update,
       {
         if (strcmp("triggered", status->u.string) == 0)
         {
+          /*
+           The indexing for the params like
+           queue, queue-group etc starts from
+           1 in the driver.
+          */
           bst_ovsdb_trigger_callback (hw_unit_id->u.integer,
-            bid, port, queue);
+            bid, port, queue-1);
         }
       }
      }
@@ -784,7 +790,7 @@ BVIEW_STATUS bst_ovsdb_bst_tracking_commit (int asic ,
     if(config->trackingMask & (1 <<realmId))
     {
       bst_ovsdb_realm_name_get (realmId, realmName);
-      sprintf (s_transact, BST_JSON_TRACKING_FORMAT ,"true",realmName);
+      sprintf (s_transact, BST_JSON_TRACKING_FORMAT_ENABLE, realmName);
       transaction = json_from_string(s_transact);
       request = jsonrpc_create_request("transact", transaction, NULL);
       jsonrpc_send (rpc, request);
@@ -792,7 +798,7 @@ BVIEW_STATUS bst_ovsdb_bst_tracking_commit (int asic ,
     else
     {
       bst_ovsdb_realm_name_get (realmId, realmName);
-      sprintf (s_transact, BST_JSON_TRACKING_FORMAT ,"false", realmName);
+      sprintf (s_transact, BST_JSON_TRACKING_FORMAT_DISABLE, realmName);
       transaction = json_from_string(s_transact);
       request = jsonrpc_create_request("transact", transaction, NULL);
       jsonrpc_send (rpc, request);
@@ -801,12 +807,12 @@ BVIEW_STATUS bst_ovsdb_bst_tracking_commit (int asic ,
   if (config->trackingMask & (1 << (BVIEW_BST_REALM_ID_MAX-1)))
   {
     bst_ovsdb_realm_name_get ((BVIEW_BST_REALM_ID_MAX-1), realmName);
-    sprintf (s_transact, BST_JSON_TRACKING_FORMAT ,"true",realmName);
+    sprintf (s_transact, BST_JSON_TRACKING_FORMAT_ENABLE, realmName);
   }
   else
   {
     bst_ovsdb_realm_name_get ((BVIEW_BST_REALM_ID_MAX-1), realmName);
-    sprintf (s_transact, BST_JSON_TRACKING_FORMAT ,"false",realmName);
+    sprintf (s_transact, BST_JSON_TRACKING_FORMAT_DISABLE, realmName);
   }
 
   transaction = json_from_string(s_transact);
