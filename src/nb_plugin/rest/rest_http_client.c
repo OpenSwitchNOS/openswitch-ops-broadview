@@ -28,6 +28,7 @@
 #include "broadview.h"
 #include "rest.h"
 #include "rest_http.h"
+#include "system.h"
 
 /******************************************************************
  * @brief  sends a HTTP 200 message to the client 
@@ -188,6 +189,8 @@ BVIEW_STATUS rest_send_async_report(REST_CONTEXT_t *rest, char *buffer, int leng
     struct sockaddr_in clientAddr;
     int temp = 0;
     BVIEW_STATUS rv = BVIEW_STATUS_SUCCESS;
+    char clientIp[BVIEW_MAX_IP_ADDR_LENGTH] = {0};
+    int clientPort = 0;
 
     snprintf(buf, REST_MAX_HTTP_BUFFER_LENGTH - 1, header, length);
 
@@ -220,8 +223,24 @@ BVIEW_STATUS rest_send_async_report(REST_CONTEXT_t *rest, char *buffer, int leng
     }
     _REST_ASSERT_NET_SOCKET_ERROR((temp > 0), "Error Creating server socket",clientFd);
 
+    /* copy the default ip address and port */
+    strncpy(&clientIp[0], SYSTEM_CONFIG_PROPERTY_CLIENT_IP_DEFAULT, BVIEW_MAX_IP_ADDR_LENGTH);
+
+    clientPort = SYSTEM_CONFIG_PROPERTY_CLIENT_PORT_DEFAULT;
+
+
     /* connect to the peer */
     temp = connect(clientFd, (struct sockaddr *) &clientAddr, sizeof (clientAddr));
+
+    if ((-1 == temp) && (clientPort == rest->config.clientPort) &&
+        (0 == strcmp(&rest->config.clientIp[0], &clientIp[0])))
+    {
+      /* the default ip and port are not reachable.
+         close fd and ignore error */
+       close(clientFd);
+       return BVIEW_STATUS_SUCCESS;
+    }
+
     _REST_ASSERT_NET_SOCKET_ERROR((temp != -1), "Error connecting to client for sending async reports",clientFd);
 
     /* send data */
