@@ -40,7 +40,13 @@ ifeq ($(PLATFORM), UB-OVSDB)
 endif
 
 ifeq ($(PLATFORM), OP-OVSDB)
-  export CFLAGS += -DBVIEW_CHIP_OVSDB --sysroot=$(BV_TARGET_SYSROOT)
+  export CFLAGS += --sysroot=$(BV_TARGET_SYSROOT)
+  ifeq ($(BV_PLATFORM), as7712)
+    export CFLAGS += -DBVIEW_CHIP_TOMAHAWK
+  else
+    export CFLAGS += -DBVIEW_CHIP_TD2
+  endif
+
   static_lib += \
         $(sb_ovsdb_arc) 
 
