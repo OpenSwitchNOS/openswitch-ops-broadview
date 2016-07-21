@@ -582,7 +582,11 @@ static void sbplugin_system_max_buf_update(int unit)
 static BVIEW_STATUS sbplugin_ovsdb_system_util_chip_type_get (unsigned int unit,
                                        BVIEW_ASIC_TYPE *asicType)
 {
-  *asicType = BVIEW_ASIC_TYPE_TD2;
+   #ifdef BVIEW_CHIP_TOMAHAWK
+     *asicType = BVIEW_ASIC_TYPE_TH;
+   #else
+     *asicType = BVIEW_ASIC_TYPE_TD2;
+   #endif
   return BVIEW_STATUS_SUCCESS;
 }
 
