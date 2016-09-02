@@ -132,59 +132,22 @@ class bstTest( OpsVsiTest ):
     def start_agent(self):
         sw_type = self.config_dict.get('switch_type',"").strip()
         if sw_type in ['',"genericx86-64"]:
-            info("***** Starting bufmond","\n")
-            startBufMond = self.s1.cmd("/bin/systemctl start bufmond")
-            startBufMond += self.s1.cmd("echo")
-            info("***** bufmond start response :",startBufMond,"\n")
-
-            repeatCount = 24
-            foundFlag = 0
-            loopFlag = True
-            while loopFlag:
-                info("***** Bufmond Status","\n")
-                statusBufMond = self.s1.cmd("/bin/systemctl status bufmond")
-                info("***** bufmond status :",statusBufMond,"\n")
-
-                for line in statusBufMond.split("\n"):
-                    statusObj = re.match( r'Active:(.*)', line.strip(), re.M|re.I)
-                    if statusObj:
-                        activeObj = re.match( r'inactive\s*\(dead\)',statusObj.group(1).strip(), re.M|re.I)
-                        if activeObj:
-                            foundFlag = 1
-                            loopFlag = False
-                            break
-                if loopFlag:
-                    repeatCount -= 1
-                if repeatCount <= 0:
-                    loopFlag = False
-                time.sleep(5)
-
-            if foundFlag == 0:
-                info("***** bufmond status is not correct...","\n")
-                exit
-
-            info("***** Starting ops-broadview","\n")
+            print "***** Starting ops-broadview"
             self.s1.popen("/usr/bin/ops-broadview")
             time.sleep(60)
             startBroadView = self.s1.cmd("echo")
-            info("***** ops-bradview status :",startBroadView,"\n")
+            print "***** ops-bradview status :" + startBroadView + "\n"
 
             out = self.s1.cmd("pgrep ops-broadview")
-            info("out : ",out,"\n")
             out = out.strip().split("\n")
-            info("out : ",out,"\n")
             if len(out) == 1:
                 self.broadview_pid = out[0]
             else:
                 self.broadview_pid = None
-            info("ops-brodview pid : ",self.broadview_pid,"\n")
+            print "ops-brodview pid : " + self.broadview_pid
 
     def stop_agent(self):
-        sw_type = self.config_dict.get('switch_type',"").strip()
-        if sw_type in ['',"genericx86-64"]:
-            if self.broadview_pid is not None:
-                out = self.s1.cmd("kill -9 "+self.broadview_pid)
-                time.sleep(3)
+        pass
 
     def getSwitchIp(self):
         sw_type = self.config_dict.get('switch_type',"").strip()
@@ -195,9 +158,10 @@ class bstTest( OpsVsiTest ):
         else:
             self.ip_address = self.config_dict.get('agent_server_ip',"127.0.0.1")
             self.port = self.config_dict.get('agent_server_port',"8080")
-        info("sw_type : ",sw_type,"\n")
-        info("ip_address : ",self.ip_address,"\n")
-        info("port : ",self.port,"\n")
+        print "\n"
+        print "sw_type : " + sw_type
+        print "ip_address : " + self.ip_address
+        print "port : " + self.port
 
     def getConfigDetails(self,filename,section):
         self.config_dict = get_ini_details(filename,section)
@@ -235,8 +199,7 @@ class Test_bstd:
         pass
 
     def __del__(self):
-        if hasattr(self, 'test'):
-            del self.test
+        pass
 
     def test_get_bst_feature(self):
         self.test.get_bst_feature()
