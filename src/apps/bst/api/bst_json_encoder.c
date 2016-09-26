@@ -1,6 +1,7 @@
 /*****************************************************************************
   *
-  * (C) Copyright Broadcom Corporation 2015
+  * Copyright © 2016 Broadcom.  The term "Broadcom" refers
+  * to Broadcom Limited and/or its subsidiaries.
   *
   * Licensed under the Apache License, Version 2.0 (the "License");
   * you may not use this file except in compliance with the License.
@@ -29,7 +30,8 @@
 #include "configure_bst_thresholds.h"
 #include "clear_bst_statistics.h"
 #include "clear_bst_thresholds.h"
-
+#include "get_bst_cgsn_drop_counters.h"
+#include "common/platform_spec.h"
 #include "bst.h"
 
 #include "bst_json_memory.h"
@@ -215,7 +217,7 @@ BVIEW_STATUS bstjson_encode_get_bst_tracking( int asicId,
  *
  *********************************************************************/
 
-static BVIEW_STATUS _jsonencode_report_device ( char *jsonBuf,
+BVIEW_STATUS _jsonencode_report_device ( char *jsonBuf,
                                                const BVIEW_BST_ASIC_SNAPSHOT_DATA_t *previous,
                                                const BVIEW_BST_ASIC_SNAPSHOT_DATA_t *current,
                                                const BSTJSON_REPORT_OPTIONS_t *options,
@@ -475,6 +477,10 @@ BVIEW_STATUS bstjson_encode_get_bst_report ( int asicId,
 
     /* get the device report */
     status = _jsonencode_report_device(jsonBuf, previous, current, options, asic, bufferLength, &tempLength);
+    if (status != BVIEW_STATUS_SUCCESS)
+    {
+      *pJsonBuffer = (uint8_t *) start;
+    }
     _JSONENCODE_ASSERT_ERROR((status == BVIEW_STATUS_SUCCESS), status);
 
     if (tempLength)
@@ -493,8 +499,12 @@ BVIEW_STATUS bstjson_encode_get_bst_report ( int asicId,
         options->includeIngressPortServicePool ||
         options->includeIngressServicePool)
     {
-        status = _jsonencode_report_ingress(jsonBuf, asicId, previous, current, options, asic, bufferLength, &tempLength);
-        _JSONENCODE_ASSERT_ERROR((status == BVIEW_STATUS_SUCCESS), status);
+      status = _jsonencode_report_ingress(jsonBuf, asicId, previous, current, options, asic, bufferLength, &tempLength);
+      if (status != BVIEW_STATUS_SUCCESS)
+      {
+        *pJsonBuffer = (uint8_t *) start;
+      }
+      _JSONENCODE_ASSERT_ERROR((status == BVIEW_STATUS_SUCCESS), status);
 
         /* adjust the buffer */
         bufferLength -= (tempLength);
@@ -511,8 +521,12 @@ BVIEW_STATUS bstjson_encode_get_bst_report ( int asicId,
         options->includeEgressUcQueue ||
         options->includeEgressUcQueueGroup )
     {
-        status = _jsonencode_report_egress(jsonBuf, asicId, previous, current, options, asic, bufferLength, &tempLength);
-        _JSONENCODE_ASSERT_ERROR((status == BVIEW_STATUS_SUCCESS), status);
+      status = _jsonencode_report_egress(jsonBuf, asicId, previous, current, options, asic, bufferLength, &tempLength);
+      if (status != BVIEW_STATUS_SUCCESS)
+      {
+        *pJsonBuffer = (uint8_t *) start;
+      }
+      _JSONENCODE_ASSERT_ERROR((status == BVIEW_STATUS_SUCCESS), status);
 
         /* adjust the buffer */
         bufferLength -= (tempLength);
@@ -569,10 +583,32 @@ BVIEW_STATUS bst_json_convert_data(const BSTJSON_REPORT_OPTIONS_t *options,
   /* Report is threshold. */
   if (true == options->reportThreshold)
   {
-    if (true == options->statUnitsInCells)
+    if (true == options->statsInPercentage)
     {
-      /* threshold comes in bytes from asic */
-      data = data / (asic->cellToByteConv);
+      if (0 == maxBufVal)
+      {
+        data = 0;
+      }
+      else
+      {
+        data = data/(asic->cellToByteConv);
+        /* we just need the percentage of the configured value */
+        percentage = ((double)(data * 100))/((double)(maxBufVal));
+        data = round_int(percentage);
+        if (100 < data)
+        {
+          data = 100;
+        }
+      }
+    }
+    else
+    {
+
+      if (true == options->statUnitsInCells)
+      {
+        /* threshold comes in bytes from asic */
+        data = data / (asic->cellToByteConv);
+      }
     }
   }
   else
@@ -594,15 +630,392 @@ BVIEW_STATUS bst_json_convert_data(const BSTJSON_REPORT_OPTIONS_t *options,
     else
     {
       /* conversion to bytes or cells based on config */
-      if (true == options->statUnitsInCells)
+      if (false == options->statUnitsInCells)
       {
-        /* threshold comes in bytes from asic */
-        data = data / (asic->cellToByteConv);
+        /* check if we need to convert the data to cells
+           the report always comes in cells from asic */
+        data = data * (asic->cellToByteConv);
       }
     }
   }
 
   *value = data;
+
+  return BVIEW_STATUS_SUCCESS;
+}
+
+BVIEW_STATUS bst_json_cgsn_req_str_get(BVIEW_BST_CGSN_REQ_TYPE_t val, char *str)
+{
+  if (NULL == str)
+    return BVIEW_STATUS_INVALID_PARAMETER;
+
+  unsigned int i = 0;
+
+  const BVIEW_BST_CGSN_DROP_REQ_MAP_t cgsn_drp_req_map[] = {
+    {"top-drops", BVIEW_BST_CGSN_TOP_DROPS},
+    {"top-port-queue-drops", BVIEW_BST_CGSN_TOP_PRT_Q_DROPS},
+    {"port-drops", BVIEW_BST_CGSN_PRT_DROPS},
+    {"port-queue-drops", BVIEW_BST_CGSN_PRT_Q_DROPS}
+  };
+  for (i = 0; i < (sizeof(cgsn_drp_req_map)/sizeof(BVIEW_BST_CGSN_DROP_REQ_MAP_t)); i++)
+  {
+    if (val == cgsn_drp_req_map[i].req)
+    {
+      strncpy(str, cgsn_drp_req_map[i].req_str, strlen(cgsn_drp_req_map[i].req_str));
+      return BVIEW_STATUS_SUCCESS;
+    }
+  }
+
+  return BVIEW_STATUS_FAILURE;
+
+}
+
+
+/******************************************************************
+ * @brief  Creates a JSON buffer using the supplied data for the 
+ *         "get-bst-congestion-drop-counters" REST API.
+ *
+ * @param[in]   asicId      ASIC for which this data is being encoded.
+ * @param[in]   pData       Data structure holding the required parameters.
+ * @param[in]   asic        pointer to asic capabilities.
+ * @param[out]  pJsonBuffer Filled-in JSON buffer
+ *                           
+ * @retval   BVIEW_STATUS_SUCCESS  Data is encoded into JSON successfully
+ * @retval   BVIEW_STATUS_RESOURCE_NOT_AVAILABLE  Internal Error
+ * @retval   BVIEW_STATUS_INVALID_PARAMETER  Invalid input parameter
+ * @retval   BVIEW_STATUS_OUTOFMEMORY  No available memory to create JSON buffer
+ *
+ * @note     The returned json-encoded-buffer should be freed using the  
+ *           bstjson_memory_free(). Failing to do so leads to memory leaks
+ *********************************************************************/
+
+BVIEW_STATUS bstjson_encode_get_cgsn_drop_ctrs ( int asicId,
+                                            const void *in_ptr,
+                                            const BVIEW_ASIC_CAPABILITIES_t *asic,
+                                            uint8_t **pJsonBuffer
+                                            )
+{
+  char *jsonBuf, *start;
+  BVIEW_STATUS status;
+  int bufferLength = BSTJSON_MEMSIZE_REPORT;
+  int tempLength = 0;
+  BVIEW_BST_CGSN_DROPS_t *pData = NULL;
+
+  time_t report_time;
+  struct tm *timeinfo;
+  char timeString[64];
+  char asicIdStr[JSON_MAX_NODE_LENGTH] = { 0 };
+  char portStr[256] = {0};
+  char queueStr[256] = {0};
+  char req_str[256] = {0};
+  unsigned int i = 0, prt = 0, queue = 0, begin = 0, end = 0;
+  bool first = true;
+  bool min_one= false;
+
+
+
+  char *getBstCgsnReportStart = " { \
+                                 \"jsonrpc\": \"2.0\",\
+                                 \"method\": \"%s\",\
+                                 \"asic-id\": \"%s\",\
+                                 \"version\": \"%d\",\
+                                 \"time-stamp\": \"%s\",\
+                                 \"report\": [ {\
+                                 \"report-type\": \"%s\",\
+                                 \"data\": [\
+                                 ";
+
+  char *portTemplate = " { \
+                        \"port\": \"%s\",\
+                        \"data\":  % " PRIu64 " }\
+                        ";
+
+  char *portQueueTemplate = " { \
+                             \"port\": \"%s\",\
+                             \"queue-type\": \"%s\",\
+                             \"data\": [ \
+                             ";
+
+  char *portQueueDataTemplate = "[ %d, % " PRIu64 "] \
+                                 ";
+
+
+  _JSONENCODE_LOG(_JSONENCODE_DEBUG_TRACE, "BST-JSON-Encoder : Request for get-bst-congestion-drop-counters \n");
+
+  pData = (BVIEW_BST_CGSN_DROPS_t *)in_ptr;
+  /* Validate Input Parameters */
+  _JSONENCODE_ASSERT (pData != NULL);
+  _JSONENCODE_ASSERT (asic != NULL);
+
+
+  /* obtain the time */
+  memset(&timeString, 0, sizeof (timeString));
+  report_time = pData->tv;
+  timeinfo = localtime(&report_time);
+  strftime(timeString, 64, "%Y-%m-%d - %H:%M:%S ", timeinfo);
+
+  if (BVIEW_STATUS_SUCCESS != 
+      bst_json_cgsn_req_str_get(pData->rcvd_req.req_type, &req_str[0]))
+    return BVIEW_STATUS_FAILURE;
+
+  /* allocate memory for JSON */
+  status = bstjson_memory_allocate(BSTJSON_MEMSIZE_REPORT, (uint8_t **) & jsonBuf);
+  _JSONENCODE_ASSERT (status == BVIEW_STATUS_SUCCESS);
+
+  start = jsonBuf;
+
+  /* clear the buffer */
+  memset(jsonBuf, 0, BSTJSON_MEMSIZE_REPORT);
+
+  /* convert asicId to external  notation */
+  JSON_ASIC_ID_MAP_TO_NOTATION(asicId, &asicIdStr[0]);
+
+  /* fill the header */
+  /* encode the JSON */
+
+  tempLength = snprintf(jsonBuf, bufferLength,getBstCgsnReportStart,
+      "get-bst-congestion-drop-counters", 
+      &asicIdStr[0], BVIEW_JSON_VERSION, timeString, &req_str[0]);
+
+  bufferLength -= tempLength;
+  jsonBuf += tempLength;
+
+  /* if the request type is to get 
+     top -n records, then sort the data */
+  if ((BVIEW_BST_CGSN_TOP_DROPS == pData->rcvd_req.req_type) ||
+      (BVIEW_BST_CGSN_TOP_PRT_Q_DROPS == pData->rcvd_req.req_type))
+  {
+    bst_sort_records(asicId, pData->rcvd_req.count);
+  }
+
+  if ((BVIEW_BST_CGSN_TOP_DROPS == pData->rcvd_req.req_type) ||
+      (BVIEW_BST_CGSN_PRT_DROPS == pData->rcvd_req.req_type))
+  {
+    if (BVIEW_BST_CGSN_PRT_DROPS == pData->rcvd_req.req_type)
+    {
+      begin = BVIEW_BST_TOTAL_DROP_CTR_INDEX_GET(1);
+      end = BVIEW_BST_TOTAL_DROP_CTR_INDEX_GET(asic->numPorts);
+    }
+    else
+    {
+      begin = 0;
+      end = pData->rcvd_req.count;
+    }
+
+    first = true;
+    for (i = begin; i <= end; i++)
+    {
+      if (0 != pData->drop_ctrs[i].ctr)
+      {
+        if (true == first)
+        {
+          first = false;
+        }
+        else
+        {
+          tempLength = snprintf(jsonBuf, bufferLength, ",");
+          bufferLength -= tempLength;
+          jsonBuf += tempLength;
+          
+        }
+        /* convert the port to an external representation */
+        memset(&portStr[0], 0, JSON_MAX_NODE_LENGTH);
+        JSON_PORT_MAP_TO_NOTATION(pData->drop_ctrs[i].port, asicId, &portStr[0]);
+
+        tempLength = snprintf(jsonBuf, bufferLength,portTemplate,
+            &portStr[0], pData->drop_ctrs[i].ctr);
+
+        bufferLength -= tempLength;
+        jsonBuf += tempLength;
+      }
+    }
+  }
+
+  else if (BVIEW_BST_CGSN_TOP_PRT_Q_DROPS == pData->rcvd_req.req_type)
+  {
+    begin = 0; 
+    end = pData->rcvd_req.count;
+    for (i = begin; i <= end; i++)
+    {
+      if (0 != pData->drop_ctrs[i].ctr)
+      {
+        if (BVIEW_BST_CGSN_UCAST == pData->drop_ctrs[i].type)
+        {
+          strncpy(&queueStr[0], "ucast", strlen("ucast"));
+        }
+        else if (BVIEW_BST_CGSN_MCAST == pData->drop_ctrs[i].type)
+        {
+          strncpy(&queueStr[0], "mcast", strlen("mcast"));
+        }
+        else
+        {
+          continue;
+        }
+        /* convert the port to an external representation */
+        memset(&portStr[0], 0, JSON_MAX_NODE_LENGTH);
+        JSON_PORT_MAP_TO_NOTATION(pData->drop_ctrs[i].port, asicId, &portStr[0]);
+
+        tempLength = snprintf(jsonBuf, bufferLength,portQueueTemplate,
+            &portStr[0], &queueStr[0]);
+
+        bufferLength -= tempLength;
+        jsonBuf += tempLength;
+
+        tempLength = snprintf(jsonBuf, bufferLength,portQueueDataTemplate,
+            pData->drop_ctrs[i].queue, pData->drop_ctrs[i].ctr);
+
+        bufferLength -= tempLength;
+        jsonBuf += tempLength;
+
+        tempLength = snprintf(jsonBuf, bufferLength,"]},");
+        bufferLength -= tempLength;
+        jsonBuf += tempLength;
+      }
+    }
+    /* adjust the buffer to remove the last ',' */
+    jsonBuf = jsonBuf - 1;
+    tempLength = tempLength - 1;
+    bufferLength = bufferLength + 1;
+  }
+  else if (BVIEW_BST_CGSN_PRT_Q_DROPS == pData->rcvd_req.req_type)
+  {
+    first = true;
+    for (prt = 1; prt < asic->numPorts; prt++)
+    {
+      if ((BVIEW_BST_CGSN_ALL == pData->rcvd_req.queue_type) ||
+          (BVIEW_BST_CGSN_UCAST == pData->rcvd_req.queue_type))
+      {
+        /* */
+        for (queue = 0; queue < BVIEW_BST_APP_NUM_COS_PORT; queue++)
+        {
+          i = BVIEW_BST_UCAST_DROP_CTR_INDEX_GET(prt, queue);
+          if (0 == pData->drop_ctrs[i].ctr)
+            continue;
+          {
+             min_one = true;
+            if (true == first)
+            {
+              first = false;
+            }
+            else
+            {
+              tempLength = snprintf(jsonBuf, bufferLength,",");
+              bufferLength -= tempLength;
+              jsonBuf += tempLength;
+
+            }
+            /* convert the port to an external representation */
+            memset(&portStr[0], 0, JSON_MAX_NODE_LENGTH);
+            JSON_PORT_MAP_TO_NOTATION(pData->drop_ctrs[i].port, asicId, &portStr[0]);
+
+            tempLength = snprintf(jsonBuf, bufferLength,portQueueTemplate,
+                &portStr[0], "ucast");
+
+            bufferLength -= tempLength;
+            jsonBuf += tempLength;
+
+            tempLength = snprintf(jsonBuf, bufferLength,portQueueDataTemplate,
+                pData->drop_ctrs[i].queue, pData->drop_ctrs[i].ctr);
+
+            bufferLength -= tempLength;
+            jsonBuf += tempLength;
+
+          }
+
+          if (true == min_one)
+          {
+            tempLength = snprintf(jsonBuf, bufferLength,"]}");
+            bufferLength -= tempLength;
+            jsonBuf += tempLength;
+          }
+        }
+#if 0
+        /* adjust the buffer to remove the last ',' */
+         jsonBuf = jsonBuf - 1;
+         tempLength = tempLength - 1;
+         bufferLength = bufferLength + 1;
+
+
+#endif
+      }
+
+      min_one = false;
+      if ((BVIEW_BST_CGSN_ALL == pData->rcvd_req.queue_type) ||
+          (BVIEW_BST_CGSN_MCAST == pData->rcvd_req.queue_type))
+      {
+        /* */
+        for (queue = 0; queue < BVIEW_BST_APP_NUM_COS_PORT; queue++)
+        {
+          i = BVIEW_BST_MCAST_DROP_CTR_INDEX_GET(prt, queue);
+          if (0 == pData->drop_ctrs[i].ctr)
+            continue;
+          {
+            min_one = true;
+            if (true == first)
+            {
+              first = false;
+            }
+            else
+            {
+              tempLength = snprintf(jsonBuf, bufferLength,",");
+              bufferLength -= tempLength;
+              jsonBuf += tempLength;
+
+            }
+
+            /* convert the port to an external representation */
+            memset(&portStr[0], 0, JSON_MAX_NODE_LENGTH);
+            JSON_PORT_MAP_TO_NOTATION(pData->drop_ctrs[i].port, asicId, &portStr[0]);
+
+            tempLength = snprintf(jsonBuf, bufferLength,portQueueTemplate,
+                &portStr[0], "mcast");
+
+            bufferLength -= tempLength;
+            jsonBuf += tempLength;
+
+            tempLength = snprintf(jsonBuf, bufferLength,portQueueDataTemplate,
+                pData->drop_ctrs[i].queue, pData->drop_ctrs[i].ctr);
+
+            bufferLength -= tempLength;
+            jsonBuf += tempLength;
+          }
+          if (true  == min_one)
+          {
+            tempLength = snprintf(jsonBuf, bufferLength,"]}");
+            bufferLength -= tempLength;
+            jsonBuf += tempLength;
+          }
+        }
+#if 0
+        /* adjust the buffer to remove the last ',' */
+         jsonBuf = jsonBuf - 1;
+         tempLength = tempLength - 1;
+         bufferLength = bufferLength + 1;
+#endif
+
+      }
+    }
+#if 0
+    /* adjust the buffer to remove the last ',' */
+    jsonBuf = jsonBuf - 1;
+    tempLength = tempLength - 1;
+    bufferLength = bufferLength + 1;i
+#endif
+  }
+
+
+
+  tempLength = snprintf(jsonBuf, bufferLength, "] } ],\"id\": %d }", pData->id);
+  bufferLength -= tempLength;
+  jsonBuf += tempLength;
+
+
+  *pJsonBuffer = (uint8_t *) start;
+
+  _JSONENCODE_LOG(_JSONENCODE_DEBUG_TRACE, "BST-JSON-Encoder : Request for Get-Bst-Report Complete [%d] bytes \n", (int)strlen(start));
+
+  _JSONENCODE_LOG(_JSONENCODE_DEBUG_DUMPJSON, "BST-JSON-Encoder : %s \n", start);
+
 
   return BVIEW_STATUS_SUCCESS;
 }

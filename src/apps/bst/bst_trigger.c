@@ -29,6 +29,7 @@
 #include "get_bst_tracking.h"
 #include "get_bst_feature.h"
 #include "get_bst_thresholds.h"
+#include "get_bst_cgsn_drop_counters.h"
 #include "get_bst_report.h"
 #include "bst_json_encoder.h"
 #include "bst.h"
@@ -451,7 +452,7 @@ BVIEW_STATUS bst_trigger_timer_add (unsigned int  unit)
     rv =  system_timer_add (bst_trigger_timer_cb,
         &bst_data_ptr->bst_trigger_timer.bstTimer,
         interval*BVIEW_BST_TIME_CONVERSION_FACTOR,
-        PERIODIC_MODE, &bst_data_ptr->bst_trigger_timer.unit);
+        PERIODIC_MODE, &bst_data_ptr->bst_trigger_timer.context.unit);
 
     if (BVIEW_STATUS_SUCCESS == rv)
     {

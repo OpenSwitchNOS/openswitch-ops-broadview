@@ -25,6 +25,7 @@
 #include "broadview.h"
 #include "cJSON.h"
 #include "configure_reg_hb_feature.h"
+#include "cancel_request.h"
 #include "system.h"
 #include "system_utils.h"
 #include "reg_hb_json_encoder.h"
@@ -151,10 +152,14 @@ BVIEW_STATUS reg_hb_json_encode_get_switch_properties (int method,
   char featureStr[JSON_MAX_NODE_LENGTH]={0};
   int asic =0;
   int len = 0;
+  int array_len = 0;
   int totalLen = 0;
   time_t report_time;
   struct tm *timeinfo;
-  char timeString[64];
+  unsigned int  featureCount = 0;
+  char timeString[BVIEW_TIME_BUFFER_SIZE];
+  char buf[JSON_MAX_NODE_LENGTH]={0};
+  
 
   _SYSTEM_UTILS_JSONENCODE_LOG(_SYSTEM_UTILS_JSONENCODE_DEBUG_TRACE, "SYSTEM_UTILS-JSON-Encoder : Request for Get-Switch-Properties \n");
 
@@ -172,35 +177,104 @@ BVIEW_STATUS reg_hb_json_encode_get_switch_properties (int method,
     memset(&timeString, 0, sizeof (timeString));
     report_time = *(time_t *) &pData->timeStamp;
     timeinfo = localtime(&report_time);
-    strftime(timeString, 64, "%Y-%m-%d - %H:%M:%S ", timeinfo);
+    strftime(timeString, 64, "%Y-%m-%d - %H:%M:%S", timeinfo);
 
-
+  array_len = JSON_MAX_NODE_LENGTH-1; 
   for (asic = 0; asic < pData->numAsics ; asic++)
   {
-    len  = snprintf (&asicInfoStr[totalLen],JSON_MAX_NODE_LENGTH,asicInfoTemplate,
+    if (pData->asicInfo[asic].asicType == BVIEW_ASIC_TYPE_TD2) 
+    {
+      sprintf (buf, "%s","BCM56850");
+    } 
+    else if (pData->asicInfo[asic].asicType == BVIEW_ASIC_TYPE_TH)
+    {
+      sprintf (buf, "%s","BCM56960");  
+    }
+    else if (pData->asicInfo[asic].asicType == BVIEW_ASIC_TYPE_QUMRAN)
+    {
+      sprintf (buf, "%s","BCM88375");
+    }
+    else 
+    {
+      sprintf (buf, "%s","");
+    }
+ 
+    len  = snprintf (&asicInfoStr[totalLen], array_len, asicInfoTemplate,
         pData->asicInfo[asic].asic_notation,
-        (pData->asicInfo[asic].asicType == BVIEW_ASIC_TYPE_TD2) ? "BCM56850" : "BCM56960",
+        buf,
         pData->asicInfo[asic].numPorts);
     totalLen += len;
+    array_len = array_len - len;
   }
   /* Remove comma after last element */
   asicInfoStr[totalLen-1] = '\0';
 
+  array_len = JSON_MAX_NODE_LENGTH -1;
   len = 0;
   totalLen = 0;
   if (pData->featureMask & BVIEW_FEATURE_BST)
   {
-    len = snprintf (&featureStr[totalLen], JSON_MAX_NODE_LENGTH,featureTemplate, "BST");
+    len = snprintf (&featureStr[totalLen], array_len,featureTemplate, "BST");
     totalLen += len;
+    featureCount++;
+    array_len = array_len - len;
   }
   if (pData->featureMask & BVIEW_FEATURE_PACKET_TRACE)
   {
-    len =  snprintf (&featureStr[totalLen], JSON_MAX_NODE_LENGTH, "%s", ",");
+    if (featureCount != 0)
+    {
+      len =  snprintf (&featureStr[totalLen], array_len, "%s", ",");
+      totalLen += len;
+      array_len = array_len - len;
+    }
+    len  = snprintf (&featureStr[totalLen], array_len, featureTemplate, "PT");
     totalLen += len;
-    len  = snprintf (&featureStr[totalLen], JSON_MAX_NODE_LENGTH, featureTemplate, "PT");
+    featureCount++;
+    array_len = array_len - len;
   }
 
-  totalLen += len;
+  if (pData->featureMask & BVIEW_FEATURE_LIVE_PT)
+  {
+    if (featureCount != 0)
+    {
+      len =  snprintf (&featureStr[totalLen], array_len, "%s", ",");
+      totalLen += len;
+      array_len = array_len - len;
+    }
+    len  = snprintf (&featureStr[totalLen], array_len, featureTemplate, "Live-PT");
+    totalLen += len;
+    featureCount++;
+    array_len = array_len - len;
+  }
+
+  if (pData->featureMask & BVIEW_FEATURE_STRG_PROV)
+  {
+    if (featureCount != 0)
+    {
+      len =  snprintf (&featureStr[totalLen], array_len, "%s", ",");
+      totalLen += len;
+      array_len = array_len - len;
+    }
+    len  = snprintf (&featureStr[totalLen], array_len, featureTemplate, "STRG");
+    totalLen += len;
+    featureCount++;
+    array_len = array_len - len;
+  }
+
+  if (pData->featureMask & BVIEW_FEATURE_BHD)
+  {
+    if (featureCount != 0)
+    {
+      len =  snprintf (&featureStr[totalLen], array_len, "%s", ",");
+      totalLen += len;
+      array_len = array_len - len;
+    }
+    len  = snprintf (&featureStr[totalLen], array_len, featureTemplate, "BHD");
+    totalLen += len;
+    featureCount++;
+    array_len = array_len - len;
+  }
+
 
   featureStr[totalLen] = '\0';
 

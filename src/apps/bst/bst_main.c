@@ -33,6 +33,7 @@
 #include "get_bst_tracking.h"
 #include "get_bst_feature.h"
 #include "get_bst_thresholds.h"
+#include "get_bst_cgsn_drop_counters.h"
 #include "get_bst_report.h"
 #include "bst_json_encoder.h"
 #include "bst.h"
@@ -43,6 +44,7 @@
 #include "openapps_log_api.h"
 #include "sbplugin_redirect_bst.h"
 #include "sbplugin_redirect_system.h"
+#include "system_utils_api.h"
 
 /* BST Context Info*/
 extern BVIEW_BST_CXT_t bst_info;
@@ -78,7 +80,8 @@ BVIEW_STATUS bst_type_api_get (int type, BVIEW_BST_API_HANDLER_t *handler)
     {BVIEW_BST_CMD_API_CLEAR_TRIGGER_COUNT, bst_clear_trigger_count},
     {BVIEW_BST_CMD_API_ENABLE_BST_ON_TRIGGER, bst_enable_on_trigger_timer_expiry},
     {BVIEW_BST_CMD_API_UPDATE_TRACK, bst_update_config_set},
-    {BVIEW_BST_CMD_API_UPDATE_FEATURE, bst_update_config_set}
+    {BVIEW_BST_CMD_API_UPDATE_FEATURE, bst_update_config_set},
+    {BVIEW_BST_CMD_API_GET_CGSN_DRP_CTRS, bst_get_cgsn_drp_ctrs}
   };
 
   for (i = 0; i < (sizeof(bst_api_list)/sizeof(BVIEW_BST_API_t)); i++)
@@ -234,9 +237,20 @@ BVIEW_STATUS bst_app_main (void)
     return BVIEW_STATUS_FAILURE;
   }
 
+  if (BVIEW_STATUS_SUCCESS != 
+	    system_utils_cancel_api_request_register(BVIEW_FEATURE_BST, bst_cancel_request))
+  {
+    /* registration with system utils for cancel request has failed.
+       return failure. so that the caller can clean the resources */
+    LOG_POST (BVIEW_LOG_ERROR,
+              "Registration with system utils for cancel request failed \r\n");
+
+    return BVIEW_STATUS_FAILURE;
+  }
+
   if (BVIEW_STATUS_SUCCESS != sbapi_system_num_units_get ((int *) &num_units))
   {
-    LOG_POST (BVIEW_LOG_ERROR, "Failed to get num of units\r\n");
+    LOG_POST (BVIEW_LOG_EMERGENCY, "Failed to get num of units\r\n");
     return BVIEW_STATUS_FAILURE;
   }
 
@@ -399,6 +413,7 @@ BVIEW_STATUS bst_app_config_init (unsigned int num_units)
   BVIEW_BST_CFG_PARAMS_t *ptr;
   BVIEW_BST_DATA_t *bst_data_ptr;
   BVIEW_STATUS rv = BVIEW_STATUS_SUCCESS;
+  BVIEW_TIME_t  tv;   
 
   BVIEW_BST_CONFIG_t bstMode;
   int unit_id = 0;
@@ -556,13 +571,15 @@ BVIEW_STATUS bst_app_config_init (unsigned int num_units)
     if ((false != ptr->config.sendAsyncReports) && (ptr->config.bstEnable != false))
     {
       /* register for timer callback only if reports need
-	 to be sent asyncronously */
-      rv = bst_periodic_collection_timer_add (unit_id);
+         to be sent asyncronously */
+      rv = bst_periodic_collection_timer_add (unit_id,
+                                              bst_periodic_collection_cb,
+                                              BVIEW_BST_CMD_API_GET_REPORT, 0);
       if (BVIEW_STATUS_SUCCESS != rv)
       {
-	LOG_POST (BVIEW_LOG_ERROR,
-	    "Failed to register with timer  for callbacks for  unit %d\r\n", unit_id);
-	return BVIEW_STATUS_FAILURE;
+        LOG_POST (BVIEW_LOG_ERROR,
+            "Failed to register with timer  for callbacks for  unit %d\r\n", unit_id);
+        return BVIEW_STATUS_FAILURE;
       }
     }
   }
@@ -682,37 +699,45 @@ BVIEW_STATUS bst_send_response (BVIEW_BST_RESPONSE_MSG_t * reply_data)
       break;
   }
 
-  if (NULL != pJsonBuffer && BVIEW_STATUS_SUCCESS == rv)
+  if (rv != BVIEW_STATUS_SUCCESS)
   {
+    /* free the allocated memory */
+    if (NULL != pJsonBuffer)
+    {
+      bstjson_memory_free(pJsonBuffer);
+    }
+    BST_LOCK_GIVE(reply_data->unit);
+    return rv;
+  }
+  if (NULL != pJsonBuffer)
+  {
+    #ifdef BST_DEBUG_METRICS
+    if (reply_data->msg_type == BVIEW_BST_CMD_API_TRIGGER_REPORT)
+    {
+      char buf[BVIEW_TIME_BUFFER_SIZE];
+      system_dispaly_local_time_get (buf);
+      printf ("\r\n%s: Sending trigger report for realm (%s) counter (%s) index1 (%d) index2 (%d)\r\n",
+             buf,reply_data->options.triggerInfo.realm,
+             reply_data->options.triggerInfo.counter,
+             reply_data->options.triggerInfo.port,
+             reply_data->options.triggerInfo.queue);
+    }
+    #endif
     rv = rest_response_send(reply_data->cookie, (char *)pJsonBuffer, strlen((char *)pJsonBuffer));
+
     if (BVIEW_STATUS_SUCCESS != rv)
     {
       _BST_LOG(_BST_DEBUG_ERROR, "sending response failed due to error = %d\r\n",rv);
       LOG_POST (BVIEW_LOG_ERROR,
           " sending response failed due to error = %d\r\n",rv);
     }
-    else
-    {
-      _BST_LOG(_BST_DEBUG_TRACE,"sent response to rest, pJsonBuffer = %s, len = %d\r\n", pJsonBuffer, (int)strlen((char *)pJsonBuffer)); 
-    }
     /* free the json buffer */
-    if (NULL != pJsonBuffer)
-    {
-      bstjson_memory_free(pJsonBuffer);
-    }
+    bstjson_memory_free(pJsonBuffer);
   }
   else
   {
     LOG_POST (BVIEW_LOG_ERROR,
-        "encoding of bst response failed due to error = %d\r\n", rv);
-    /* Can happen that memory is allocated,
-      but the encoding failed.. in that case also 
-      free the json buffer.
-       */
-    if (NULL != pJsonBuffer)
-    {
-      bstjson_memory_free(pJsonBuffer);
-    }
+        "encoding of bst response failed due failure of memory allocation\r\n");
   }
   /* release the lock for success and failed cases */
   BST_LOCK_GIVE(reply_data->unit);
@@ -748,7 +773,8 @@ BVIEW_STATUS bst_copy_reply_params (BVIEW_BST_REQUEST_MSG_t * msg_data,
 {
   BVIEW_BST_UNIT_CXT_t *ptr;
   BVIEW_BST_STAT_COLLECT_CONFIG_t *pCollect = &msg_data->request.collect;
-  BVIEW_BST_REPORT_OPTIONS_t  *pResp; 
+  BVIEW_BST_REPORT_OPTIONS_t  *pResp;
+  BVIEW_BST_CGSN_DROPS_t *tmp = NULL;
 
   if ((NULL == msg_data) || (NULL == reply_data))
     return BVIEW_STATUS_INVALID_PARAMETER;
@@ -812,7 +838,7 @@ BVIEW_STATUS bst_copy_reply_params (BVIEW_BST_REQUEST_MSG_t * msg_data,
 
         /* copy the backup record ptr if and only if the report is periodic */
 
-        if (BVIEW_BST_STATS_PERIODIC == msg_data->report_type)
+        if (BVIEW_BST_PERIODIC == msg_data->report_type)
         {
             reply_data->options.sendIncrementalReport = 
                  ptr->bst_data->bst_config.config.sendIncrementalReport;
@@ -853,6 +879,8 @@ BVIEW_STATUS bst_copy_reply_params (BVIEW_BST_REQUEST_MSG_t * msg_data,
         reply_data->response.report.backup = NULL;
          reply_data->options.sendIncrementalReport = 
                  false;
+        reply_data->options.statsInPercentage = 
+          ptr->bst_data->bst_config.config.statsInPercentage;
       }
       break;
 
@@ -862,6 +890,19 @@ BVIEW_STATUS bst_copy_reply_params (BVIEW_BST_REQUEST_MSG_t * msg_data,
 
     case BVIEW_BST_CMD_API_GET_TRACK:
       reply_data->response.track = &ptr->bst_data->bst_config.track;
+      break;
+
+    case BVIEW_BST_CMD_API_GET_CGSN_DRP_CTRS:
+    BST_LOCK_TAKE (msg_data->unit);
+    tmp = ptr->cgsn_drp_curr;
+    ptr->cgsn_drp_curr = ptr->cgsn_drp_active;
+    ptr->cgsn_drp_active = tmp;
+    reply_data->response.drp_ctr_report = ptr->cgsn_drp_active;
+    if (BVIEW_BST_PERIODIC == msg_data->report_type)
+    {
+      reply_data->cookie = NULL;
+    }
+    BST_LOCK_GIVE (msg_data->unit);
       break;
 
     default:
@@ -928,11 +969,16 @@ BVIEW_STATUS bst_send_request (BVIEW_BST_REQUEST_MSG_t * msg_data)
 BVIEW_STATUS bst_periodic_collection_cb (union sigval sigval)
 {
   BVIEW_BST_REQUEST_MSG_t msg_data;
-  BVIEW_STATUS rv; 
+  BVIEW_STATUS rv;
+  BVIEW_BST_TIMER_CONTEXT_t context;
 
-  msg_data.report_type = BVIEW_BST_STATS_PERIODIC;
-  msg_data.msg_type = BVIEW_BST_CMD_API_GET_REPORT;
-  msg_data.unit = (*(int *)sigval.sival_ptr);
+  memset(&context, 0, sizeof(BVIEW_BST_TIMER_CONTEXT_t));
+
+  msg_data.report_type = BVIEW_BST_PERIODIC;
+  context = (*(BVIEW_BST_TIMER_CONTEXT_t *)sigval.sival_ptr);
+  msg_data.msg_type = context.cmd;
+  msg_data.unit = context.unit;
+  msg_data.id = context.index;
   /* Send the message to the bst application */
   rv = bst_send_request (&msg_data);
   if (BVIEW_STATUS_SUCCESS != rv)
@@ -978,7 +1024,7 @@ void bst_app_uninit ()
        delete the timer.
        loop through all the units and close
      */
-    bst_periodic_collection_timer_delete (id);
+    bst_periodic_collection_timer_delete (id, BVIEW_BST_CMD_API_GET_REPORT, 0);
     /* Destroy mutex */
     bst_mutex = &bst_info.unit[id].bst_mutex;
     pthread_mutex_destroy (bst_mutex);
@@ -1010,6 +1056,16 @@ void bst_app_uninit ()
     if (NULL != bst_info.unit[id].threshold_record_ptr)
     {
       free (bst_info.unit[id].threshold_record_ptr);
+    }
+
+    if (NULL != bst_info.unit[id].cgsn_drp_curr)
+    {
+      free (bst_info.unit[id].cgsn_drp_curr);
+    }
+
+    if (NULL != bst_info.unit[id].cgsn_drp_active)
+    {
+      free (bst_info.unit[id].cgsn_drp_active);
     }
   }
   
@@ -1106,10 +1162,22 @@ BVIEW_STATUS bst_main ()
       (BVIEW_BST_REPORT_SNAPSHOT_t *)
       malloc (sizeof (BVIEW_BST_REPORT_SNAPSHOT_t));
 
+    /* cgsn records */
+    bst_info.unit[id].cgsn_drp_curr =
+      (BVIEW_BST_CGSN_DROPS_t *)
+      malloc (sizeof (BVIEW_BST_CGSN_DROPS_t));
+
+    /* threshold records */
+    bst_info.unit[id].cgsn_drp_active =
+      (BVIEW_BST_CGSN_DROPS_t *)
+      malloc (sizeof (BVIEW_BST_CGSN_DROPS_t));
+
     if ((NULL == bst_info.unit[id].bst_data) ||
         (NULL == bst_info.unit[id].stats_active_record_ptr) ||
         (NULL == bst_info.unit[id].stats_backup_record_ptr) ||
         (NULL == bst_info.unit[id].stats_current_record_ptr) ||
+        (NULL == bst_info.unit[id].cgsn_drp_active) ||
+        (NULL == bst_info.unit[id].cgsn_drp_curr) ||
         (NULL == bst_info.unit[id].threshold_record_ptr))
     {
       /* Free the resources allocated so far */
@@ -1134,6 +1202,12 @@ BVIEW_STATUS bst_main ()
 
     memset (bst_info.unit[id].threshold_record_ptr, 0,
             sizeof (BVIEW_BST_REPORT_SNAPSHOT_t));
+
+    memset (bst_info.unit[id].cgsn_drp_active, 0,
+            sizeof (BVIEW_BST_CGSN_DROPS_t));
+
+    memset (bst_info.unit[id].cgsn_drp_curr, 0,
+            sizeof (BVIEW_BST_CGSN_DROPS_t));
   }
 
     bstjson_memory_init();

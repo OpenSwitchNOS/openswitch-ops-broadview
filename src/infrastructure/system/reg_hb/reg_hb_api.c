@@ -23,16 +23,19 @@
 #include <signal.h>
 #include <pthread.h>
 #include "json.h"
+#include "feature.h"
 #include "configure_reg_hb_feature.h"
 #include "get_switch_properties.h"
 #include "broadview.h"
+#include "openapps_feature.h"
+#include "cancel_request.h"
 #include "system.h"
 #include "system_utils.h"
 #include "reg_hb.h"
 #include "openapps_log_api.h"
 #include "sbplugin_redirect_system.h"
 
- extern BVIEW_SYSTEM_UTILS_CXT_t system_utils_info;
+extern BVIEW_SYSTEM_UTILS_CXT_t system_utils_info;
 
 /*********************************************************************
   * @brief : application function to configure the system utility features

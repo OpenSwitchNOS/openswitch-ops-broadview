@@ -1,6 +1,7 @@
 /*****************************************************************************
   *
-  * (C) Copyright Broadcom Corporation 2015
+  * Copyright © 2016 Broadcom.  The term "Broadcom" refers
+  * to Broadcom Limited and/or its subsidiaries.
   *
   * Licensed under the Apache License, Version 2.0 (the "License");
   * you may not use this file except in compliance with the License.
@@ -26,6 +27,7 @@
 #include "configure_bst_tracking.h"
 
 #include "bst.h"
+#include "common/platform_spec.h"
 
 #include "bst_json_memory.h"
 #include "bst_json_encoder.h"
@@ -72,7 +74,7 @@ static BVIEW_STATUS _jsonencode_report_ingress_ippg ( char *buffer, int asicId,
     for (port = 1; port <= asic->numPorts; port++)
     {
       /* check if the trigger report request should contain snap shot */
-        if ((port != options->triggerInfo.port) &&
+        if ((port != options->triggerInfo.port) && 
             (false == options->sendSnapShotOnTrigger) && 
             (true == options->reportTrigger))
         {
@@ -148,22 +150,23 @@ static BVIEW_STATUS _jsonencode_report_ingress_ippg ( char *buffer, int asicId,
         /* for each priority-group, prepare the data */
         for (priGroup = 1; priGroup <= asic->numPriorityGroups; priGroup++)
         {
-            /* we ignore if there is no data to be reported */
-            if (includePriorityGroups[priGroup - 1] == 0)
-                continue;
+          /* we ignore if there is no data to be reported */
+          if (includePriorityGroups[priGroup - 1] == 0)
+            continue;
 
-            val1 = current->iPortPg.data[port - 1][priGroup - 1].umShareBufferCount;
-            maxBufVal = options->bst_max_buffers_ptr->iPortPg.data[port - 1][priGroup - 1].umShareMaxBuf;
-            bst_json_convert_data(options, asic, &val1, maxBufVal);
+          val1 = current->iPortPg.data[port - 1][priGroup - 1].umShareBufferCount;
+          maxBufVal = options->bst_max_buffers_ptr->iPortPg.data[port - 1][priGroup - 1].umShareMaxBuf;
+          
+          bst_json_convert_data(options, asic, &val1, maxBufVal);
 
-            val2 = current->iPortPg.data[port - 1][priGroup - 1].umHeadroomBufferCount;
-            maxBufVal = options->bst_max_buffers_ptr->iPortPg.data[port - 1][priGroup - 1].umHeadroomMaxBuf;
-            bst_json_convert_data(options, asic, &val2, maxBufVal);
+          maxBufVal = options->bst_max_buffers_ptr->iPortPg.data[port - 1][priGroup - 1].umHeadroomMaxBuf;
+          val2 = current->iPortPg.data[port - 1][priGroup - 1].umHeadroomBufferCount;
+          bst_json_convert_data(options, asic, &val2, maxBufVal);
 
 
-            /* add the data to the report */
-            _JSONENCODE_COPY_FORMATTED_STRING_AND_ADVANCE(actualLength, buffer, remLength, length,
-                                                          ippgPortGroupTemplate, priGroup-1, val1, val2);
+          /* add the data to the report */
+          _JSONENCODE_COPY_FORMATTED_STRING_AND_ADVANCE(actualLength, buffer, remLength, length,
+              ippgPortGroupTemplate, priGroup-1, val1, val2);
         }
 
           /* adjust the buffer to remove the last ',' */
@@ -234,7 +237,7 @@ static BVIEW_STATUS _jsonencode_report_ingress_ipsp ( char *buffer, int asicId,
     for (port = 1; port <= asic->numPorts; port++)
     {
       /* check if the trigger report request should contain snap shot */
-        if ((port != options->triggerInfo.port) &&
+        if ((port != options->triggerInfo.port) && 
             (false == options->sendSnapShotOnTrigger) && 
             (true == options->reportTrigger))
         {

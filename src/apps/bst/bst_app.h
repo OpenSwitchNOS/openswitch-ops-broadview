@@ -33,6 +33,8 @@ extern "C" {
 #define MSG_QUEUE_ID_TO_BST_TRIGGER  0x108
 
 
+#define  BVIEW_BST_APP_NUM_COS_PORT    8
+
 #define _BST_DEBUG
 #define _BST_DEBUG_LEVEL        0x00 
 
@@ -89,17 +91,66 @@ extern "C" {
 /* Maximum number of failed Receive messages */
 #define BVIEW_BST_MAX_QUEUE_SEND_FAILS      10
 
+
+/* congestion drop counters changes - start */
+#define BVIEW_BST_NUM_UCAST_DROP_CTRS_PORT  BVIEW_BST_APP_NUM_COS_PORT
+#define BVIEW_BST_NUM_MCAST_DROP_CTRS_PORT  BVIEW_BST_APP_NUM_COS_PORT
+#define BVIEW_BST_NUM_TOTAL_DROP_CTRS_PORT 1
+
+#define BVIEW_BST_MAX_CGSN_CTRS_PORT (BVIEW_BST_NUM_UCAST_DROP_CTRS_PORT + \
+                                      BVIEW_BST_NUM_MCAST_DROP_CTRS_PORT + \
+                                      BVIEW_BST_NUM_TOTAL_DROP_CTRS_PORT)
+
+
+#define BVIEW_BST_TOTAL_DROP_CTRS (BVIEW_BST_MAX_CGSN_CTRS_PORT * BVIEW_ASIC_MAX_PORTS)
+
+
+#define BVIEW_BST_UCAST_DROP_CTR_START  0 
+#define BVIEW_BST_MCAST_DROP_CTR_START  (BVIEW_ASIC_MAX_PORTS * BVIEW_BST_NUM_UCAST_DROP_CTRS_PORT) 
+#define BVIEW_BST_TOTAL_DROP_CTR_START  (BVIEW_ASIC_MAX_PORTS * (BVIEW_BST_NUM_UCAST_DROP_CTRS_PORT + BVIEW_BST_NUM_MCAST_DROP_CTRS_PORT)) 
+  
+
+#define BVIEW_BST_UCAST_DROP_CTR_INDEX_GET(__prt__, __queue_) \
+  (BVIEW_BST_UCAST_DROP_CTR_START + ((__prt__-1)*BVIEW_BST_NUM_UCAST_DROP_CTRS_PORT)+ __queue_)
+
+
+#define BVIEW_BST_MCAST_DROP_CTR_INDEX_GET(__prt__, __queue_) \
+  (BVIEW_BST_MCAST_DROP_CTR_START + ((__prt__-1)*BVIEW_BST_NUM_MCAST_DROP_CTRS_PORT)+ __queue_)
+
+#define BVIEW_BST_TOTAL_DROP_CTR_INDEX_GET(__prt__) \
+   (BVIEW_BST_TOTAL_DROP_CTR_START + (__prt__-1))
+
+
+typedef struct _bst_cgsn_drop_ctr_s_
+{
+  unsigned int port;
+  unsigned int queue;
+  BVIEW_BST_CGSN_CTR_TYPE_t type;
+  uint64_t ctr;
+}BVIEW_BST_CGSN_CTR_t;
+
+typedef struct _bst_cgsn_drops_
+{
+  BVIEW_BST_CGSN_CTR_t  drop_ctrs[BVIEW_BST_TOTAL_DROP_CTRS];
+  BVIEW_TIME_t tv;
+  unsigned int id;
+  BSTJSON_GET_BST_CGSN_DROP_CTRS_t rcvd_req;
+}BVIEW_BST_CGSN_DROPS_t;
+
+/* congestion drop counters changes - end */
+
 typedef BSTJSON_CONFIGURE_BST_TRACKING_t  BVIEW_BST_TRACK_PARAMS_t;
 typedef BSTJSON_CONFIGURE_BST_FEATURE_t   BVIEW_BST_CONFIG_PARAMS_t;
 typedef BSTJSON_REPORT_OPTIONS_t          BVIEW_BST_REPORT_OPTIONS_t;
 typedef BSTJSON_GET_BST_REPORT_t          BVIEW_BST_STAT_COLLECT_CONFIG_t;
 typedef BSTJSON_CONFIGURE_BST_THRESHOLDS_t BVIEW_BST_THRESHOLD_CONFIG_t;
+typedef BSTJSON_GET_BST_CGSN_DROP_CTRS_t   BVIEW_BST_CGSN_DRP_CTRS_t;
 
 
 typedef enum _bst_report_type_ {
   BVIEW_BST_STATS = 1,
   BVIEW_BST_THRESHOLD,
-  BVIEW_BST_STATS_PERIODIC,
+  BVIEW_BST_PERIODIC,
   BVIEW_BST_STATS_TRIGGER
 }BVIEW_BST_REPORT_TYPE_t;
 
@@ -172,7 +223,7 @@ typedef enum _bst_cmd_ {
   BVIEW_BST_CMD_API_CLEAR_TRIGGER_COUNT,
   BVIEW_BST_CMD_API_ENABLE_BST_ON_TRIGGER,
   BVIEW_BST_CMD_API_TRIGGER_COLLECT,
-
+  BVIEW_BST_CMD_API_GET_CGSN_DRP_CTRS,
  /* update config group */
   BVIEW_BST_CMD_API_UPDATE_TRACK,
   BVIEW_BST_CMD_API_UPDATE_FEATURE,
@@ -218,6 +269,8 @@ typedef enum _bst_cmd_ {
       BVIEW_BST_TRACK_PARAMS_t  track;
       /* params requsted to collect in report */
       BVIEW_BST_STAT_COLLECT_CONFIG_t   collect;
+      /* congestion drop counters */
+      BSTJSON_GET_BST_CGSN_DROP_CTRS_t drp_ctrs;
       /* params to config threshold */
       BVIEW_BST_DEVICE_THRESHOLD_t                       device_threshold;
       BVIEW_BST_INGRESS_PORT_PG_THRESHOLD_t              i_p_pg_threshold;
@@ -233,6 +286,7 @@ typedef enum _bst_cmd_ {
 
 
     }request;
+    unsigned int threshold_config_mask;
   }BVIEW_BST_REQUEST_MSG_t;
 
 
@@ -250,21 +304,61 @@ typedef enum _bst_cmd_ {
       BVIEW_BST_CONFIG_PARAMS_t *config;
       BVIEW_BST_TRACK_PARAMS_t  *track;
       BVIEW_BST_REPORT_RESP_t   report;
+      BVIEW_BST_CGSN_DROPS_t   *drp_ctr_report; 
     }response;
   }BVIEW_BST_RESPONSE_MSG_t;
 
-  typedef struct _bst_timer_s_ {
+  typedef struct _bst_timer_context_s_ {
     unsigned int unit;
+    unsigned int index;
+    long cmd;
+  }BVIEW_BST_TIMER_CONTEXT_t;
+
+  typedef struct _bst_timer_s_ {
     bool in_use;
+    BVIEW_BST_TIMER_CONTEXT_t context;
     timer_t bstTimer;
   }BVIEW_BST_TIMER_t;
+
+  typedef struct _bst_drop_ctrs_elem_s_ {
+    bool in_use;
+    unsigned int id;
+    long type;
+    BSTJSON_GET_BST_CGSN_DROP_CTRS_t req;
+    BVIEW_BST_TIMER_t cgsn_drop;
+  }BVIEW_BST_CGSN_DROP_ELEM_t;
+
 
   typedef struct _bst_data_ {
     BVIEW_BST_TIMER_t bst_collection_timer;
     BVIEW_BST_TIMER_t bst_trigger_timer;
     BVIEW_BST_CFG_PARAMS_t bst_config;
     BVIEW_BST_STAT_COLLECT_CONFIG_t  bst_stats_config;
+    BVIEW_BST_CGSN_DROP_ELEM_t drop_ctrs_db[BVIEW_MAX_REQUESTS];
   } BVIEW_BST_DATA_t;
+
+typedef BVIEW_STATUS(*BVIEW_BST_THRESHOLD_API_HANDLER_t) (BSTJSON_CONFIGURE_BST_THRESHOLDS_t *cmd,
+                                              BVIEW_BST_REQUEST_MSG_t * msg_data);
+/* structure to map realm to threshold type */
+typedef struct _bst_realm_to_threshold_ {
+  /* realm string */
+  char *realm;
+  /* threshold  type*/
+  BVIEW_BST_THRESHOLD_TYPE_t threshold;
+  /* threshold validation handler */
+  BVIEW_BST_THRESHOLD_API_HANDLER_t handler;
+}BVIEW_BST_REALM_THRESHOLD_t;
+
+
+typedef BVIEW_STATUS(*BVIEW_BST_THRESHOLD_HANDLER_t) (BVIEW_BST_REQUEST_MSG_t * msg_data);
+/* structure to map realm to threshold set function */
+typedef struct _bst_realm_to_thresholdset_ {
+  /* threshold  type*/
+  BVIEW_BST_THRESHOLD_TYPE_t threshold;
+  /* threshold validation handler */
+  BVIEW_BST_THRESHOLD_HANDLER_t handler;
+}BVIEW_BST_REALM_THRESHOLD_HANDLER_t;
+
 
 
 typedef struct _bst_context_unit_info__
@@ -276,8 +370,13 @@ typedef struct _bst_context_unit_info__
   /* threshold records */
   BVIEW_BST_REPORT_SNAPSHOT_t *threshold_record_ptr;
 
+  /* congestion drop counter records */
+  BVIEW_BST_CGSN_DROPS_t *cgsn_drp_curr;
+  BVIEW_BST_CGSN_DROPS_t *cgsn_drp_active;
+
   /* place holder to store the bst max buffer settings */
   BVIEW_SYSTEM_ASIC_MAX_BUF_SNAPSHOT_DATA_t bst_max_buffers;
+  BVIEW_BST_ASIC_SNAPSHOT_DATA_t bst_thresholds_cache;
 
   /* config data */
   BVIEW_BST_DATA_t *bst_data;
@@ -548,6 +647,19 @@ _ptr = BST_UNIT_PTR_GET (_unit);                                         \
 } while(0)
 
 
+#define BST_VALIDATE_PERCENTAGE_INPUT(_kk_)                              \
+do {                                                                          \
+    if ((0 >= _kk_) || \
+            (_kk_ > 100)) { \
+    return BVIEW_STATUS_FAILURE;                          \
+  }                                                                            \
+}while (0)
+
+
+#define BST_CONVERT_CELLS_TO_BYTES(_kk_, __factor__)                              \
+do {                                                                          \
+    _kk_ = ( _kk_ *__factor__);\
+}while (0)
 
 
 /* functions */
@@ -663,6 +775,9 @@ BVIEW_STATUS bst_get_report(BVIEW_BST_REQUEST_MSG_t *msg_data);
 * @brief : function to add timer for the periodic stats collection 
 *
 * @param[in] unit : unit for which the periodic stats need to be collected.
+* @param[in] handler :callback handler from timer context 
+* @param[in] cmd : command request type 
+* @param[in] id : command request id
 *
 * @retval  : BVIEW_STATUS_INVALID_PARAMETER -- Inpput paramerts are invalid. 
 * @retval  : BVIEW_STATUS_FAILURE -- failed to add the timer 
@@ -675,12 +790,17 @@ BVIEW_STATUS bst_get_report(BVIEW_BST_REQUEST_MSG_t *msg_data);
 *         unit and hence we need per timer per unit.
 *
 *********************************************************************/
-BVIEW_STATUS bst_periodic_collection_timer_add (unsigned int  unit);
+BVIEW_STATUS bst_periodic_collection_timer_add (unsigned int  unit,
+                                                void * handler, 
+                                                BVIEW_FEATURE_BST_CMD_API_t cmd,
+                                                unsigned int id);
 
 /*********************************************************************
 * @brief : Deletes the timer node for the given unit
 *
 * @param[in] unit : unit id for which  the timer needs to be deleted.
+* @param[in] cmd :  cmd for which  the timer needs to be deleted.
+* @param[in] id :  id for which  the timer needs to be deleted.
 *
 * @retval  : BVIEW_STATUS_INVALID_PARAMETER -- Inpput paramerts are invalid. 
 * @retval  : BVIEW_STATUS_FAILURE -- timer is successfully deleted 
@@ -690,8 +810,9 @@ BVIEW_STATUS bst_periodic_collection_timer_add (unsigned int  unit);
 *          is turned off. This timer is per unit.
 *
 *********************************************************************/
-BVIEW_STATUS bst_periodic_collection_timer_delete (int unit);
-
+BVIEW_STATUS bst_periodic_collection_timer_delete (int unit,
+                                                   BVIEW_FEATURE_BST_CMD_API_t cmd,
+                                                   unsigned int id);
 /*********************************************************************
 * @brief : function to send reponse for encoding to cjson and sending 
 *          using rest API 
@@ -1010,33 +1131,82 @@ BVIEW_STATUS bst_enable_on_trigger(BVIEW_BST_REQUEST_MSG_t *msg_data, int bstEna
 *
 *********************************************************************/
 BVIEW_STATUS bst_enable_on_trigger_timer_expiry (BVIEW_BST_REQUEST_MSG_t * msg_data);
-BVIEW_STATUS bst_update_config_set(BVIEW_BST_REQUEST_MSG_t * msg_data);
 
 /*********************************************************************
-* @brief  Prepare MASK of ream's
+* @brief : application function to get the bst congestion drop counters 
 *
-* @param[in]   data                    - Pointer to BST config
-* @param[in]   config                  - Pointer to OVSDB config
+* @param[in] msg_data : pointer to the bst message request.
 *
-* @notes    none
+* @retval  : BVIEW_STATUS_INVALID_PARAMETER : Inpput paramerts are invalid. 
+* @retval  : BVIEW_STATUS_SUCCESS : when the bst feature params is 
+*                                   retrieved successfully.
 *
+* @note
 *
 *********************************************************************/
-void bst_realm_to_mask (BVIEW_BST_TRACK_PARAMS_t *data,
-                                int *mask);
+BVIEW_STATUS bst_get_cgsn_drp_ctrs(BVIEW_BST_REQUEST_MSG_t * msg_data);
 
-/*********************************************************************
-* @brief  Prepare MASK of ream's
-*
-* @param[in]   data                    - Pointer to BST config
-* @param[in]   config                  - Pointer to OVSDB config
-*
-* @notes    none
-*
-*
-*********************************************************************/
-void bst_mask_to_realm (int trackingMask,
-                        BVIEW_BST_TRACK_PARAMS_t *data);
+void bst_sort_records(unsigned int unit, unsigned int count);
+
+/* bst set threshold functions */
+BVIEW_STATUS bst_device_threshold_set(BVIEW_BST_REQUEST_MSG_t * msg_data);
+
+BVIEW_STATUS bst_ippg_threshold_set(BVIEW_BST_REQUEST_MSG_t * msg_data);
+
+BVIEW_STATUS bst_ipsp_threshold_set(BVIEW_BST_REQUEST_MSG_t * msg_data);
+BVIEW_STATUS bst_isp_threshold_set(BVIEW_BST_REQUEST_MSG_t * msg_data);
+BVIEW_STATUS bst_epsp_threshold_set(BVIEW_BST_REQUEST_MSG_t * msg_data);
+BVIEW_STATUS bst_esp_threshold_set(BVIEW_BST_REQUEST_MSG_t * msg_data);
+BVIEW_STATUS bst_euq_threshold_set(BVIEW_BST_REQUEST_MSG_t * msg_data);
+BVIEW_STATUS bst_euqg_threshold_set(BVIEW_BST_REQUEST_MSG_t * msg_data);
+BVIEW_STATUS bst_emc_threshold_set(BVIEW_BST_REQUEST_MSG_t * msg_data);
+BVIEW_STATUS bst_ecpu_threshold_set(BVIEW_BST_REQUEST_MSG_t * msg_data);
+BVIEW_STATUS bst_erqe_threshold_set(BVIEW_BST_REQUEST_MSG_t * msg_data);
+
+
+
+BVIEW_STATUS bst_device_threshold_input_validate(BSTJSON_CONFIGURE_BST_THRESHOLDS_t *pCommand,
+                                                 BVIEW_BST_REQUEST_MSG_t *msg_data);
+
+
+BVIEW_STATUS bst_ippg_threshold_input_validate(BSTJSON_CONFIGURE_BST_THRESHOLDS_t *pCommand,
+                                                 BVIEW_BST_REQUEST_MSG_t *msg_data);
+
+
+BVIEW_STATUS bst_ipsp_threshold_input_validate(BSTJSON_CONFIGURE_BST_THRESHOLDS_t *pCommand,
+                                                 BVIEW_BST_REQUEST_MSG_t *msg_data);
+
+
+BVIEW_STATUS bst_isp_threshold_input_validate(BSTJSON_CONFIGURE_BST_THRESHOLDS_t *pCommand,
+                                                 BVIEW_BST_REQUEST_MSG_t *msg_data);
+
+
+BVIEW_STATUS bst_epsp_threshold_input_validate(BSTJSON_CONFIGURE_BST_THRESHOLDS_t *pCommand,
+                                                 BVIEW_BST_REQUEST_MSG_t *msg_data);
+
+
+BVIEW_STATUS bst_esp_threshold_input_validate(BSTJSON_CONFIGURE_BST_THRESHOLDS_t *pCommand,
+                                                 BVIEW_BST_REQUEST_MSG_t *msg_data);
+
+
+BVIEW_STATUS bst_euq_threshold_input_validate(BSTJSON_CONFIGURE_BST_THRESHOLDS_t *pCommand,
+                                                 BVIEW_BST_REQUEST_MSG_t *msg_data);
+
+
+BVIEW_STATUS bst_euqg_threshold_input_validate(BSTJSON_CONFIGURE_BST_THRESHOLDS_t *pCommand,
+                                                 BVIEW_BST_REQUEST_MSG_t *msg_data);
+
+
+BVIEW_STATUS bst_emc_threshold_input_validate(BSTJSON_CONFIGURE_BST_THRESHOLDS_t *pCommand,
+                                                 BVIEW_BST_REQUEST_MSG_t *msg_data);
+
+
+BVIEW_STATUS bst_ecpu_threshold_input_validate(BSTJSON_CONFIGURE_BST_THRESHOLDS_t *pCommand,
+                                                 BVIEW_BST_REQUEST_MSG_t *msg_data);
+
+
+BVIEW_STATUS bst_erqe_threshold_input_validate(BSTJSON_CONFIGURE_BST_THRESHOLDS_t *pCommand,
+                                                 BVIEW_BST_REQUEST_MSG_t *msg_data);
 
 
 #ifdef __cplusplus

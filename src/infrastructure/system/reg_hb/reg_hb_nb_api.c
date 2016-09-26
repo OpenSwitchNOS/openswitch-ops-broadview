@@ -21,6 +21,7 @@
 #include "configure_reg_hb_feature.h"
 #include "get_reg_hb_feature.h"
 #include "get_switch_properties.h"
+#include "cancel_request.h"
 #include "system.h"
 #include "broadview.h"
 #include "openapps_log_api.h"
@@ -147,4 +148,48 @@ BVIEW_STATUS reg_hb_json_get_feature_impl (void *cookie, int id,
   }
   return rv;
 }
+
+/*********************************************************************
+  * @brief : REST API handler to cancel request 
+  *
+  * @param[in] cookie : pointer to the cookie
+  * @param[in] id     : unit id
+  * @param[in] pCommand : pointer to the input command structure
+  *
+  * @retval  : BVIEW_STATUS_SUCCESS : the message is successfully posted
+  *            to sys utility queue.
+  * @retval  : BVIEW_STATUS_FAILURE : failed to post the message to application.
+  * @retval  : BVIEW_STATUS_INVALID_PARAMETER : invalid parameter.
+  *
+  * @note    : This api posts the request to application to get
+  *            switch properties params.
+  *
+  *********************************************************************/
+BVIEW_STATUS reg_hb_json_cancel_request_impl (void *cookie,
+                                                     int asicId, 
+                                                     int id,
+                                                     REG_HB_JSON_CANCEL_REQUEST_t *pCommand)
+{
+  BVIEW_STATUS rv;
+  BVIEW_SYSTEM_UTILS_REQUEST_MSG_t msg_data;
+
+  memset (&msg_data, 0, sizeof (BVIEW_SYSTEM_UTILS_REQUEST_MSG_t));
+  msg_data.cookie = cookie;
+  msg_data.unit = asicId;
+  msg_data.id = id;
+  msg_data.msg_type = BVIEW_SYSTEM_UTILS_CMD_API_CANCEL_REQUEST;
+  msg_data.request.cancel = *pCommand;
+  /* send message to system utils application */
+  rv = system_utils_send_request (&msg_data);
+  if (BVIEW_STATUS_SUCCESS != rv)
+  {
+    LOG_POST (BVIEW_LOG_ERROR,
+        "failed to post get system utils feature to system utils queue. err = %d.\r\n",rv);
+  }
+  return rv;
+
+
+  return BVIEW_STATUS_SUCCESS;
+}
+
 
